@@ -398,56 +398,92 @@
         }
         
         .alert {
-            padding: 1.25rem 1.5rem;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
             border-radius: var(--radius);
-            margin-bottom: 1.75rem;
+            font-size: 0.9375rem;
             display: flex;
-            align-items: flex-start;
-            gap: 1rem;
-            box-shadow: var(--shadow-sm);
+            align-items: center;
+            gap: 0.75rem;
         }
         
-        .alert-icon {
-            flex-shrink: 0;
-            margin-top: 0.125rem;
-            font-size: 1.25rem;
-        }
-        
-        .alert-content {
-            flex: 1;
-        }
-        
-        .alert-title {
-            font-weight: 600;
-            margin-bottom: 0.375rem;
+        .alert i {
             font-size: 1.125rem;
         }
         
         .alert-info {
             background-color: rgba(59, 130, 246, 0.1);
             border-left: 4px solid var(--info);
-        }
-        
-        .alert-info .alert-icon {
-            color: var(--info);
+            color: var(--gray-700);
         }
         
         .alert-warning {
             background-color: rgba(245, 158, 11, 0.1);
             border-left: 4px solid var(--warning);
-        }
-        
-        .alert-warning .alert-icon {
-            color: var(--warning);
+            color: var(--gray-700);
         }
         
         .alert-error {
             background-color: rgba(239, 68, 68, 0.1);
             border-left: 4px solid var(--danger);
+            color: var(--gray-700);
         }
         
-        .alert-error .alert-icon {
+        .alert-error h3 {
             color: var(--danger);
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .alert-error ul {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .alert-error p {
+            margin-bottom: 0.5rem;
+        }
+        
+        .error-message {
+            color: var(--danger);
+            font-weight: 500;
+        }
+        
+        /* Indicador de digitau00e7u00e3o */
+        .typing-indicator {
+            padding: 1rem;
+        }
+        
+        .typing-dots {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+        
+        .typing-dots span {
+            width: 0.5rem;
+            height: 0.5rem;
+            background-color: var(--gray-400);
+            border-radius: 50%;
+            display: inline-block;
+            animation: typingAnimation 1.4s infinite ease-in-out both;
+        }
+        
+        .typing-dots span:nth-child(1) {
+            animation-delay: 0s;
+        }
+        
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typingAnimation {
+            0%, 80%, 100% { transform: scale(0.6); }
+            40% { transform: scale(1); }
         }
         
         .tabs {
@@ -1222,9 +1258,19 @@
                         noPdfAlert.style.display = 'none';
                         statusMessage.style.display = 'none';
                         
+                        // Adicionar aviso se o artigo foi truncado para processamento
+                        let truncationWarning = '';
+                        if (data.was_truncated) {
+                            if (data.severely_truncated) {
+                                truncationWarning = `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> O artigo era muito grande (${data.pdf_length} caracteres) e precisou ser significativamente reduzido para processamento. A análise pode não cobrir todo o conteúdo.</div>`;
+                            } else {
+                                truncationWarning = `<div class="alert alert-info"><i class="fas fa-info-circle"></i> O artigo era grande (${data.pdf_length} caracteres) e algumas partes intermediárias foram omitidas para processamento. A análise foca nas partes principais.</div>`;
+                            }
+                        }
+                        
                         // Formatar a resposta para melhor visualização
                         let formattedAnswer = formatAnalysisOutput(data.answer, selectedCriteria);
-                        answer.innerHTML = formattedAnswer;
+                        answer.innerHTML = truncationWarning + formattedAnswer;
                         
                         // Adicionar classe de animação para fade-in
                         result.classList.add('fade-in');
@@ -1246,6 +1292,31 @@
                         statusMessage.textContent = 'Erro: ' + error.message;
                         statusMessage.style.color = 'var(--danger)';
                         pdfFileInput.value = '';
+                        
+                        // Mostrar mensagem de erro mais detalhada
+                        result.style.display = 'block';
+                        answer.innerHTML = `
+                            <div class="alert alert-error">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <div>
+                                    <h3>Erro ao processar o PDF</h3>
+                                    <p>${error.message}</p>
+                                    <p>Possíveis causas:</p>
+                                    <ul>
+                                        <li>O arquivo PDF pode estar corrompido</li>
+                                        <li>O PDF pode estar protegido ou criptografado</li>
+                                        <li>O PDF pode conter apenas imagens sem texto extraível</li>
+                                        <li>O formato do arquivo pode não ser compatível</li>
+                                    </ul>
+                                    <p>Sugestões:</p>
+                                    <ul>
+                                        <li>Tente com outro arquivo PDF</li>
+                                        <li>Verifique se o PDF contém texto selecionável</li>
+                                        <li>Se o PDF for um scan, considere usar um software OCR antes</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        `;
                     });
                 })
                 .catch(error => {
@@ -1274,13 +1345,19 @@
                     return;
                 }
                 
-                // Adicionar mensagem do usuário
+                // Adicionar mensagem do usuário ao chat
                 addMessage(question, 'user');
                 chatInput.value = '';
+                chatInput.focus();
                 
                 // Mostrar indicador de digitação
-                const typingIndicator = addMessage('<i class="fas fa-circle-notch fa-spin"></i> Processando...', 'ai');
+                const typingIndicator = document.createElement('div');
+                typingIndicator.className = 'message bot-message typing-indicator';
+                typingIndicator.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+                chatMessages.appendChild(typingIndicator);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
                 
+                // Enviar a pergunta para o backend
                 fetch('/chat', {
                     method: 'POST',
                     headers: {
@@ -1288,20 +1365,32 @@
                     },
                     body: JSON.stringify({ question: question })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erro ao processar a pergunta');
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    // Remover indicador de digitação
-                    typingIndicator.remove();
+                    // Remover o indicador de digitação
+                    chatMessages.removeChild(typingIndicator);
                     
-                    // Adicionar resposta da IA
-                    addMessage(data.answer, 'ai');
+                    // Adicionar aviso se o artigo foi truncado para processamento
+                    let truncationWarning = '';
+                    if (data.severely_truncated) {
+                        truncationWarning = '<p><em><i class="fas fa-exclamation-triangle"></i> Nota: O artigo era muito grande e foi reduzido para processamento. A resposta pode não considerar todo o conteúdo.</em></p>';
+                    }
+                    
+                    // Adicionar a resposta formatada
+                    const formattedAnswer = formatChatMessage(data.answer);
+                    addMessage(truncationWarning + formattedAnswer, 'bot');
                 })
                 .catch(error => {
-                    // Remover indicador de digitação
-                    typingIndicator.remove();
+                    // Remover o indicador de digitação
+                    chatMessages.removeChild(typingIndicator);
                     
-                    // Adicionar mensagem de erro
-                    addMessage('Erro ao processar sua pergunta. Por favor, tente novamente.', 'ai');
+                    // Mostrar mensagem de erro
+                    addMessage(`<p class="error-message"><i class="fas fa-exclamation-circle"></i> ${error.message}</p>`, 'bot');
                 });
             }
             
@@ -1310,8 +1399,8 @@
                 messageDiv.className = `message ${sender}-message fade-in`;
                 
                 // Formatar o texto da mensagem se for da IA
-                if (sender === 'ai') {
-                    messageDiv.innerHTML = formatChatMessage(text);
+                if (sender === 'bot') {
+                    messageDiv.innerHTML = text;
                 } else {
                     messageDiv.textContent = text;
                 }

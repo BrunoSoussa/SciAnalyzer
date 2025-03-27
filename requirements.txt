@@ -4,4 +4,4 @@ python-dotenv==1.0.0
 google-generativeai==0.3.1
 pyPDF2==3.0.1
 flask-cors==4.0.0
-google-genai
+pdfminer.six==20250327

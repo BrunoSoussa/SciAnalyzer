@@ -7,6 +7,10 @@ from flask_cors import CORS
 import google.generativeai as genai
 import PyPDF2
 from werkzeug.utils import secure_filename
+# Importar pdfminer.six para extração de texto alternativa
+from io import StringIO
+from pdfminer.high_level import extract_text_to_fp
+from pdfminer.layout import LAParams
 
 app = Flask(__name__)
 app.secret_key = "analisador_artigos_cientificos_2025"  # Chave fixa para sessões mais estáveis
@@ -22,19 +26,90 @@ genai.configure(api_key=API_KEY)
 # Set up the model
 model = genai.GenerativeModel('gemini-2.0-flash')
 
+# Definir limites de tokens mais adequados para artigos grandes
+MAX_TOKENS_LIMIT = 60000  # Aumentado para acomodar artigos maiores
+MAX_CHUNK_SIZE = 30000    # Tamanho máximo de cada chunk para processamento
+
 def extract_text_from_pdf(pdf_file):
-    """Extract text content from a PDF file"""
+    """Extract text content from a PDF file using multiple methods for robustness"""
+    text = ""
+    errors = []
+    
+    # Método 1: Tentar com PyPDF2 primeiro
     try:
+        app.logger.info(f"Tentando extrair texto com PyPDF2 de {pdf_file}")
         pdf_reader = PyPDF2.PdfReader(pdf_file)
-        text = ""
         for page_num in range(len(pdf_reader.pages)):
-            page_text = pdf_reader.pages[page_num].extract_text()
-            if page_text:
-                text += page_text + "\n\n"
-        return text
+            try:
+                page_text = pdf_reader.pages[page_num].extract_text()
+                if page_text:
+                    text += page_text + "\n\n"
+            except Exception as page_error:
+                app.logger.warning(f"Erro ao extrair texto da página {page_num}: {str(page_error)}")
+                # Continuar com a próxima página mesmo se esta falhar
+                continue
+        
+        if text.strip():
+            app.logger.info("Extração com PyPDF2 bem-sucedida")
+            return text
     except Exception as e:
-        app.logger.error(f"Error extracting text from PDF: {str(e)}")
-        raise
+        error_msg = f"Erro ao extrair texto com PyPDF2: {str(e)}"
+        app.logger.warning(error_msg)
+        errors.append(error_msg)
+    
+    # Método 2: Se PyPDF2 falhar, tentar com pdfminer.six
+    try:
+        app.logger.info(f"Tentando extrair texto com pdfminer.six de {pdf_file}")
+        output_string = StringIO()
+        with open(pdf_file, 'rb') as pdf_file_obj:
+            extract_text_to_fp(pdf_file_obj, output_string, laparams=LAParams(), 
+                              codec='utf-8')
+        text = output_string.getvalue()
+        
+        if text.strip():
+            app.logger.info("Extração com pdfminer.six bem-sucedida")
+            return text
+    except Exception as e:
+        error_msg = f"Erro ao extrair texto com pdfminer.six: {str(e)}"
+        app.logger.warning(error_msg)
+        errors.append(error_msg)
+    
+    # Se chegamos aqui, ambos os métodos falharam
+    if not text or not text.strip():
+        error_details = "\n".join(errors)
+        app.logger.error(f"Falha em todos os métodos de extração de texto. Detalhes: {error_details}")
+        raise Exception(f"Não foi possível extrair texto do PDF. O arquivo pode estar corrompido ou protegido.")
+    
+    return text
+
+def process_large_text(text, max_size=MAX_CHUNK_SIZE):
+    """Processa textos grandes dividindo em chunks ou resumindo conforme necessário"""
+    if len(text) <= max_size:
+        return text
+    
+    # Se o texto for maior que o limite, dividimos em partes importantes
+    # Pegar o início (introdução, resumo, etc.)
+    intro_size = max_size // 3
+    intro = text[:intro_size]
+    
+    # Pegar o final (conclusões, resultados, etc.)
+    conclusion_size = max_size // 3
+    conclusion = text[-conclusion_size:]
+    
+    # Pegar uma parte do meio (desenvolvimento, métodos, etc.)
+    middle_start = (len(text) - max_size // 3) // 2
+    middle = text[middle_start:middle_start + max_size // 3]
+    
+    # Combinar as partes com uma nota explicativa
+    processed_text = (
+        f"{intro}\n\n"  
+        f"[...CONTEÚDO INTERMEDIÁRIO OMITIDO PARA PROCESSAMENTO...]\n\n"
+        f"{middle}\n\n"
+        f"[...CONTEÚDO INTERMEDIÁRIO OMITIDO PARA PROCESSAMENTO...]\n\n"
+        f"{conclusion}"
+    )
+    
+    return processed_text
 
 @app.route('/', methods=['GET'])
 def index():
@@ -92,24 +167,52 @@ def analyze_pdf():
             session.pop('pdf_text', None)
             return jsonify({"error": "No text could be extracted from the PDF. The file might be scanned or contain only images."}), 400
         
-        # If the PDF text is too long, truncate it to avoid exceeding Gemini's token limit
-        max_tokens = 30000  # Approximate token limit for Gemini Pro
-        if len(pdf_text) > max_tokens:
-            pdf_text = pdf_text[:max_tokens] + "\n[Content truncated due to length]\n"
+        # Verificar o tamanho do texto e processar conforme necessário
+        original_length = len(pdf_text)
+        was_truncated = False
+        
+        if len(pdf_text) > MAX_TOKENS_LIMIT:
+            app.logger.info(f"PDF muito grande ({len(pdf_text)} caracteres). Processando para análise.")
+            pdf_text = process_large_text(pdf_text)
+            was_truncated = True
         
         # Create the prompt for scientific article analysis
         prompt = create_scientific_analysis_prompt(pdf_text, criteria)
         
-        # Generate response from Gemini
-        response = model.generate_content(prompt)
-        
-        return jsonify({
-            "success": True,
-            "criteria": criteria,
-            "answer": response.text,
-            "pdf_length": len(pdf_text),
-            "has_pdf": True
-        })
+        try:
+            # Generate response from Gemini
+            response = model.generate_content(prompt)
+            
+            return jsonify({
+                "success": True,
+                "criteria": criteria,
+                "answer": response.text,
+                "pdf_length": original_length,
+                "has_pdf": True,
+                "was_truncated": was_truncated
+            })
+        except Exception as api_error:
+            # Tentar novamente com um texto ainda menor se houver erro de API
+            app.logger.warning(f"Erro na API Gemini: {str(api_error)}. Tentando com texto reduzido.")
+            
+            # Reduzir ainda mais o texto para uma segunda tentativa
+            reduced_text = process_large_text(pdf_text, MAX_CHUNK_SIZE // 2)
+            prompt = create_scientific_analysis_prompt(reduced_text, criteria)
+            
+            try:
+                response = model.generate_content(prompt)
+                
+                return jsonify({
+                    "success": True,
+                    "criteria": criteria,
+                    "answer": response.text,
+                    "pdf_length": original_length,
+                    "has_pdf": True,
+                    "was_truncated": True,
+                    "severely_truncated": True
+                })
+            except Exception as final_error:
+                raise Exception(f"Falha ao processar o artigo mesmo após redução: {str(final_error)}")
         
     except Exception as e:
         # Limpar dados em caso de erro
@@ -143,17 +246,38 @@ def chat_with_article():
         return jsonify({"error": "No article context found. Please upload a PDF first."}), 400
     
     try:
+        # Processar o texto se for muito grande
+        if len(pdf_text) > MAX_CHUNK_SIZE:
+            pdf_text = process_large_text(pdf_text)
+        
         # Create the prompt for article chat
         prompt = f"""You are an expert scientific article analyst. Based on the following scientific article, please answer this question: {question}\n\nARTICLE CONTENT:\n{pdf_text} always respond in ptbr """
         
-        # Generate response from Gemini
-        response = model.generate_content(prompt)
-        
-        return jsonify({
-            "success": True,
-            "question": question,
-            "answer": response.text
-        })
+        try:
+            # Generate response from Gemini
+            response = model.generate_content(prompt)
+            
+            return jsonify({
+                "success": True,
+                "question": question,
+                "answer": response.text
+            })
+        except Exception as api_error:
+            # Tentar novamente com um texto ainda menor se houver erro de API
+            app.logger.warning(f"Erro na API Gemini durante chat: {str(api_error)}. Tentando com texto reduzido.")
+            
+            # Reduzir ainda mais o texto para uma segunda tentativa
+            reduced_text = process_large_text(pdf_text, MAX_CHUNK_SIZE // 2)
+            prompt = f"""You are an expert scientific article analyst. Based on the following scientific article, please answer this question: {question}\n\nARTICLE CONTENT:\n{reduced_text} always respond in ptbr """
+            
+            response = model.generate_content(prompt)
+            
+            return jsonify({
+                "success": True,
+                "question": question,
+                "answer": response.text,
+                "severely_truncated": True
+            })
         
     except Exception as e:
         app.logger.error(f"Error in chat endpoint: {str(e)}")
