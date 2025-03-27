@@ -11,6 +11,11 @@ from werkzeug.utils import secure_filename
 from io import StringIO
 from pdfminer.high_level import extract_text_to_fp
 from pdfminer.layout import LAParams
+# Importar bibliotecas adicionais para tratamento robusto de PDFs
+import re
+import io
+import logging
+import unicodedata
 
 app = Flask(__name__)
 app.secret_key = "analisador_artigos_cientificos_2025"  # Chave fixa para sessões mais estáveis
@@ -30,6 +35,30 @@ model = genai.GenerativeModel('gemini-2.0-flash')
 MAX_TOKENS_LIMIT = 60000  # Aumentado para acomodar artigos maiores
 MAX_CHUNK_SIZE = 30000    # Tamanho máximo de cada chunk para processamento
 
+def sanitize_text(text):
+    """Limpa o texto removendo caracteres problemáticos e normalizando"""
+    if not text:
+        return ""
+    
+    try:
+        # Substituir caracteres de controle por espaços, exceto quebras de linha
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', text)
+        
+        # Normalizar caracteres Unicode
+        text = unicodedata.normalize('NFKD', text)
+        
+        # Remover sequências de espaços extras
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remover linhas vazias consecutivas
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+        
+        return text
+    except Exception as e:
+        app.logger.warning(f"Erro ao sanitizar texto: {str(e)}")
+        # Retornar o texto original se houver erro na sanitização
+        return text if text else ""
+
 def extract_text_from_pdf(pdf_file):
     """Extract text content from a PDF file using multiple methods for robustness"""
     text = ""
@@ -39,19 +68,23 @@ def extract_text_from_pdf(pdf_file):
     try:
         app.logger.info(f"Tentando extrair texto com PyPDF2 de {pdf_file}")
         pdf_reader = PyPDF2.PdfReader(pdf_file)
+        pdf_text = ""
+        
+        # Processar cada página individualmente para maior robustez
         for page_num in range(len(pdf_reader.pages)):
             try:
                 page_text = pdf_reader.pages[page_num].extract_text()
                 if page_text:
-                    text += page_text + "\n\n"
+                    # Sanitizar o texto da página antes de adicionar
+                    pdf_text += sanitize_text(page_text) + "\n\n"
             except Exception as page_error:
                 app.logger.warning(f"Erro ao extrair texto da página {page_num}: {str(page_error)}")
                 # Continuar com a próxima página mesmo se esta falhar
                 continue
         
-        if text.strip():
+        if pdf_text.strip():
             app.logger.info("Extração com PyPDF2 bem-sucedida")
-            return text
+            return pdf_text
     except Exception as e:
         error_msg = f"Erro ao extrair texto com PyPDF2: {str(e)}"
         app.logger.warning(error_msg)
@@ -61,26 +94,101 @@ def extract_text_from_pdf(pdf_file):
     try:
         app.logger.info(f"Tentando extrair texto com pdfminer.six de {pdf_file}")
         output_string = StringIO()
-        with open(pdf_file, 'rb') as pdf_file_obj:
-            extract_text_to_fp(pdf_file_obj, output_string, laparams=LAParams(), 
-                              codec='utf-8')
-        text = output_string.getvalue()
         
-        if text.strip():
-            app.logger.info("Extração com pdfminer.six bem-sucedida")
-            return text
+        # Configurar parâmetros mais tolerantes para pdfminer
+        laparams = LAParams(
+            char_margin=2.0,  # Aumentar margem entre caracteres
+            line_margin=0.5,  # Aumentar margem entre linhas
+            word_margin=0.1,  # Aumentar margem entre palavras
+            detect_vertical=True,  # Detectar texto vertical
+            all_texts=True  # Extrair todos os textos, mesmo os que parecem decorativos
+        )
+        
+        with open(pdf_file, 'rb') as pdf_file_obj:
+            try:
+                extract_text_to_fp(pdf_file_obj, output_string, laparams=laparams, 
+                                codec='utf-8')
+                text = output_string.getvalue()
+                # Sanitizar o texto extraído
+                text = sanitize_text(text)
+                
+                if text.strip():
+                    app.logger.info("Extração com pdfminer.six bem-sucedida")
+                    return text
+            except Exception as inner_error:
+                app.logger.warning(f"Erro durante extração com pdfminer: {str(inner_error)}")
+                # Tentar extrair página por página se falhar a extração completa
+                try:
+                    from pdfminer.pdfpage import PDFPage
+                    from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+                    from pdfminer.converter import TextConverter
+                    
+                    text = ""
+                    resource_manager = PDFResourceManager()
+                    
+                    # Voltar ao início do arquivo
+                    pdf_file_obj.seek(0)
+                    
+                    # Processar página por página
+                    for page in PDFPage.get_pages(pdf_file_obj, check_extractable=False):
+                        try:
+                            output = StringIO()
+                            converter = TextConverter(resource_manager, output, laparams=laparams)
+                            interpreter = PDFPageInterpreter(resource_manager, converter)
+                            interpreter.process_page(page)
+                            
+                            page_text = output.getvalue()
+                            text += sanitize_text(page_text) + "\n\n"
+                            
+                            converter.close()
+                            output.close()
+                        except Exception as page_error:
+                            app.logger.warning(f"Erro ao processar página individual: {str(page_error)}")
+                            continue
+                    
+                    if text.strip():
+                        app.logger.info("Extração página por página bem-sucedida")
+                        return text
+                except Exception as detailed_error:
+                    app.logger.warning(f"Falha na extração página por página: {str(detailed_error)}")
     except Exception as e:
         error_msg = f"Erro ao extrair texto com pdfminer.six: {str(e)}"
         app.logger.warning(error_msg)
         errors.append(error_msg)
     
-    # Se chegamos aqui, ambos os métodos falharam
-    if not text or not text.strip():
-        error_details = "\n".join(errors)
-        app.logger.error(f"Falha em todos os métodos de extração de texto. Detalhes: {error_details}")
-        raise Exception(f"Não foi possível extrair texto do PDF. O arquivo pode estar corrompido ou protegido.")
+    # Método 3: Tentar extrair texto bruto como último recurso
+    try:
+        app.logger.info("Tentando extração de texto bruto como último recurso")
+        with open(pdf_file, 'rb') as pdf_file_obj:
+            content = pdf_file_obj.read()
+            
+            # Procurar por strings de texto no arquivo bruto
+            printable_chars = re.findall(b'[\x20-\x7E\n\r\t]+', content)
+            raw_text = b''.join(printable_chars).decode('utf-8', errors='ignore')
+            
+            # Limpar o texto bruto
+            raw_text = sanitize_text(raw_text)
+            
+            # Remover linhas muito curtas que provavelmente são lixo
+            raw_text = '\n'.join([line for line in raw_text.split('\n') if len(line.strip()) > 3])
+            
+            if raw_text.strip():
+                app.logger.info("Extração de texto bruto bem-sucedida")
+                return raw_text
+    except Exception as e:
+        error_msg = f"Erro na extração de texto bruto: {str(e)}"
+        app.logger.warning(error_msg)
+        errors.append(error_msg)
     
-    return text
+    # Se chegamos aqui, todos os métodos falharam, mas vamos retornar qualquer texto que tenhamos conseguido
+    if text and text.strip():
+        app.logger.warning("Retornando texto parcial após falhas nos métodos principais")
+        return text
+    
+    # Se realmente não conseguimos nada, lançar exceção
+    error_details = "\n".join(errors)
+    app.logger.error(f"Falha em todos os métodos de extração de texto. Detalhes: {error_details}")
+    raise Exception(f"Não foi possível extrair texto do PDF. O arquivo pode estar corrompido ou protegido.")
 
 def process_large_text(text, max_size=MAX_CHUNK_SIZE):
     """Processa textos grandes dividindo em chunks ou resumindo conforme necessário"""
