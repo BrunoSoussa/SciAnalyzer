@@ -1063,6 +1063,7 @@
                     
                     <div class="result" id="result" style="display: none;">
                         <h3 class="analysis-title"><i class="fas fa-clipboard-check"></i> Avaliação do Artigo</h3>
+                        <div id="filename-display" style="margin-bottom: 15px; font-style: italic; display: none;"></div>
                         <div id="answer" class="analysis-content"></div>
                     </div>
                     
@@ -1183,36 +1184,57 @@
             }
             
             function checkPdfStatus() {
-                // Verificar se temos um ID de PDF salvo no localStorage
-                const savedPdfId = localStorage.getItem('currentPdfId');
-                if (savedPdfId) {
-                    currentPdfId = savedPdfId;
-                    
-                    fetch(`/check-pdf-status?pdf_id=${currentPdfId}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.has_pdf) {
-                                pdfUploaded = true;
-                                noPdfAlert.style.display = 'none';
-                                result.style.display = 'block';
-                                chatContainer.style.display = 'block';
-                            } else {
-                                pdfUploaded = false;
-                                chatContainer.style.display = 'none';
-                                result.style.display = 'none';
-                                noPdfAlert.style.display = 'block';
-                                // Limpar o ID do PDF salvo
-                                localStorage.removeItem('currentPdfId');
-                                currentPdfId = null;
+                console.log("Verificando status do PDF...");
+                
+                fetch('/check-pdf-status')
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log("Resposta do status do PDF:", data);
+                        
+                        if (data.success && data.pdf_uploaded && data.pdf_id) {
+                            // Armazenar o ID do PDF atual
+                            currentPdfId = data.pdf_id;
+                            console.log("PDF ID recuperado:", currentPdfId);
+                            
+                            // Atualizar a interface para mostrar que um PDF está carregado
+                            uploadForm.style.display = 'none';
+                            chatContainer.style.display = 'block';
+                            result.style.display = 'block';
+                            pdfUploaded = true;
+                            
+                            // Exibir nome do arquivo se disponível
+                            if (data.filename) {
+                                const filenameDisplay = document.getElementById('filename-display');
+                                if (filenameDisplay) {
+                                    filenameDisplay.textContent = 'Arquivo carregado: ' + data.filename;
+                                    filenameDisplay.style.display = 'block';
+                                }
                             }
-                        })
-                        .catch(error => {
-                            console.error('Erro ao verificar status do PDF:', error);
-                            // Limpar o ID do PDF salvo em caso de erro
-                            localStorage.removeItem('currentPdfId');
+                            
+                            // Se temos um resumo, exibi-lo
+                            if (data.summary) {
+                                summaryOutput.innerHTML = data.summary;
+                                analysisContainer.style.display = 'block';
+                            }
+                        } else {
+                            // Nenhum PDF carregado ou ID inválido
+                            console.log("Nenhum PDF válido encontrado.");
+                            uploadForm.style.display = 'block';
+                            chatContainer.style.display = 'none';
+                            result.style.display = 'none';
+                            pdfUploaded = false;
                             currentPdfId = null;
-                        });
-                }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao verificar status do PDF:', error);
+                        // Em caso de erro, voltar para o estado inicial
+                        uploadForm.style.display = 'block';
+                        chatContainer.style.display = 'none';
+                        result.style.display = 'none';
+                        pdfUploaded = false;
+                        currentPdfId = null;
+                    });
             }
             
             analyzeBtn.addEventListener('click', function() {

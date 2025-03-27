@@ -2,7 +2,7 @@ import os
 import tempfile
 import traceback
 import json
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
 import google.generativeai as genai
 import PyPDF2
@@ -20,6 +20,7 @@ import uuid
 import time
 
 app = Flask(__name__)
+app.secret_key = 'secret_key_here'  # Add a secret key for session management
 CORS(app)
 
 # Configurar logging
@@ -90,135 +91,231 @@ def sanitize_text(text):
         return text if text else ""
 
 def extract_text_from_pdf(pdf_file):
-    """Extract text content from a PDF file using multiple methods for robustness"""
+    """Extract text from PDF file using multiple methods with robust error handling"""
     text = ""
     errors = []
+    extraction_methods_tried = []
     
-    # Método 1: Tentar com PyPDF2 primeiro
+    # Função interna para registrar tentativas e erros
+    def log_attempt(method_name, error=None):
+        extraction_methods_tried.append(method_name)
+        if error:
+            error_msg = f"{method_name} falhou: {str(error)}"
+            errors.append(error_msg)
+            app.logger.warning(error_msg)
+    
+    # Método 1: Tentar com PyPDF2 (método principal)
     try:
+        extraction_methods_tried.append("PyPDF2-full")
         app.logger.info(f"Tentando extrair texto com PyPDF2 de {pdf_file}")
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        pdf_text = ""
         
-        # Processar cada página individualmente para maior robustez
-        for page_num in range(len(pdf_reader.pages)):
+        # Verificar se o arquivo é um PDF válido antes de tentar extrair
+        try:
+            # Tratamento específico para o erro '/Root'
             try:
-                page_text = pdf_reader.pages[page_num].extract_text()
-                if page_text:
-                    # Sanitizar o texto da página antes de adicionar
-                    pdf_text += sanitize_text(page_text) + "\n\n"
-            except Exception as page_error:
-                app.logger.warning(f"Erro ao extrair texto da página {page_num}: {str(page_error)}")
-                # Continuar com a próxima página mesmo se esta falhar
-                continue
-        
-        if pdf_text.strip():
-            app.logger.info("Extração com PyPDF2 bem-sucedida")
-            return pdf_text
-    except Exception as e:
-        error_msg = f"Erro ao extrair texto com PyPDF2: {str(e)}"
-        app.logger.warning(error_msg)
-        errors.append(error_msg)
-    
-    # Método 2: Se PyPDF2 falhar, tentar com pdfminer.six
-    try:
-        app.logger.info(f"Tentando extrair texto com pdfminer.six de {pdf_file}")
-        output_string = StringIO()
-        
-        # Configurar parâmetros mais tolerantes para pdfminer
-        laparams = LAParams(
-            char_margin=2.0,  # Aumentar margem entre caracteres
-            line_margin=0.5,  # Aumentar margem entre linhas
-            word_margin=0.1,  # Aumentar margem entre palavras
-            detect_vertical=True,  # Detectar texto vertical
-            all_texts=True  # Extrair todos os textos, mesmo os que parecem decorativos
-        )
-        
-        with open(pdf_file, 'rb') as pdf_file_obj:
-            try:
-                extract_text_to_fp(pdf_file_obj, output_string, laparams=laparams, 
-                                codec='utf-8')
-                text = output_string.getvalue()
-                # Sanitizar o texto extraído
-                text = sanitize_text(text)
-                
-                if text.strip():
-                    app.logger.info("Extração com pdfminer.six bem-sucedida")
-                    return text
-            except Exception as inner_error:
-                app.logger.warning(f"Erro durante extração com pdfminer: {str(inner_error)}")
-                # Tentar extrair página por página se falhar a extração completa
-                try:
-                    from pdfminer.pdfpage import PDFPage
-                    from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
-                    from pdfminer.converter import TextConverter
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+            except KeyError as ke:
+                if '/Root' in str(ke):
+                    app.logger.warning(f"Erro de estrutura PDF '/Root' - tentando com reparo")
+                    # Usar uma abordagem alternativa para PDFs com erro /Root
+                    from io import BytesIO
+                    if hasattr(pdf_file, 'read'):
+                        pdf_bytes = pdf_file.read()
+                        pdf_file.seek(0)  # Reset file pointer
+                    else:
+                        with open(pdf_file, 'rb') as f:
+                            pdf_bytes = f.read()
                     
-                    text = ""
-                    resource_manager = PDFResourceManager()
-                    
-                    # Voltar ao início do arquivo
-                    pdf_file_obj.seek(0)
-                    
-                    # Processar página por página
-                    for page in PDFPage.get_pages(pdf_file_obj, check_extractable=False):
+                    # Tentar reparar o PDF corrompido (método 1)
+                    try:
+                        from PyPDF2 import PdfWriter
+                        from PyPDF2.generic import NameObject
+                        
+                        memory_file = BytesIO(pdf_bytes)
+                        writer = PdfWriter()
+                        
+                        # Tentar criar um novo PDF
                         try:
-                            output = StringIO()
-                            converter = TextConverter(resource_manager, output, laparams=laparams)
-                            interpreter = PDFPageInterpreter(resource_manager, converter)
-                            interpreter.process_page(page)
+                            reader = PyPDF2.PdfReader(memory_file, strict=False)
+                            for page in reader.pages:
+                                writer.add_page(page)
                             
-                            page_text = output.getvalue()
-                            text += sanitize_text(page_text) + "\n\n"
+                            # Escrever o PDF reparado em memória
+                            output_pdf = BytesIO()
+                            writer.write(output_pdf)
+                            output_pdf.seek(0)
                             
-                            converter.close()
-                            output.close()
-                        except Exception as page_error:
-                            app.logger.warning(f"Erro ao processar página individual: {str(page_error)}")
-                            continue
+                            # Tentar ler o PDF reparado
+                            pdf_reader = PyPDF2.PdfReader(output_pdf)
+                        except Exception as repair_error:
+                            app.logger.warning(f"Reparo 1 falhou: {str(repair_error)}")
+                            raise
+                    except Exception as repair_method_error:
+                        app.logger.warning(f"Método de reparo 1 falhou: {str(repair_method_error)}")
+                        # Tentar extrair texto de uma maneira alternativa sem reconstruir o PDF
+                        raise
+                else:
+                    # Outros erros KeyError que não são '/Root'
+                    raise
+            
+            # Verificar se o PDF tem uma estrutura válida
+            if not hasattr(pdf_reader, "pages") or len(pdf_reader.pages) == 0:
+                raise ValueError("PDF sem páginas válidas")
+                
+            # Extrair texto de todas as páginas
+            full_text = ""
+            for page_num, page in enumerate(pdf_reader.pages):
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        full_text += page_text + "\n\n"
+                except Exception as page_error:
+                    app.logger.warning(f"Erro ao extrair texto da página {page_num}: {str(page_error)}")
+                    # Continuar com outras páginas mesmo se uma falhar
+            
+            if full_text.strip():
+                text = full_text
+                app.logger.info(f"Extração PyPDF2 bem-sucedida: {len(text)} caracteres")
+                return sanitize_text(text)  # Se bem-sucedido, retornar imediatamente
+            else:
+                log_attempt("PyPDF2-full", "Nenhum texto extraído")
+        except KeyError as ke:
+            # Lidar especificamente com o erro KeyError: '/Root'
+            if "/Root" in str(ke):
+                log_attempt("PyPDF2-full", f"Erro de estrutura PDF: {str(ke)}")
+            else:
+                log_attempt("PyPDF2-full", ke)
+        except Exception as e:
+            log_attempt("PyPDF2-full", e)
+    except Exception as outer_e:
+        log_attempt("PyPDF2-full", outer_e)
+    
+    # Método 2: Tentar com PyPDF2 página por página (fallback 1)
+    if not text.strip():
+        try:
+            app.logger.info("Tentando extração com PyPDF2 página por página")
+            
+            # Resetar o ponteiro do arquivo se for um objeto arquivo
+            if hasattr(pdf_file, 'seek'):
+                pdf_file.seek(0)  # Reset file pointer
+            
+            try:
+                # Tentar com configurações menos estritas
+                pdf_reader = PyPDF2.PdfReader(pdf_file, strict=False)
+                
+                page_by_page_text = ""
+                for i in range(len(pdf_reader.pages)):
+                    try:
+                        page = pdf_reader.pages[i]
+                        page_text = page.extract_text()
+                        if page_text:
+                            page_by_page_text += page_text + "\n\n"
+                    except Exception as page_error:
+                        app.logger.warning(f"Erro ao extrair texto da página {i} (método página por página): {str(page_error)}")
+                        # Continuar com outras páginas
+                
+                if page_by_page_text.strip():
+                    text = page_by_page_text
+                    app.logger.info(f"Extração PyPDF2 página por página bem-sucedida: {len(text)} caracteres")
+                else:
+                    log_attempt("PyPDF2-page-by-page", "Nenhum texto extraído")
+            except Exception as pdf_error:
+                app.logger.warning(f"Erro ao ler PDF página por página: {str(pdf_error)}")
+                log_attempt("PyPDF2-page-by-page", pdf_error)
+        except Exception as e:
+            log_attempt("PyPDF2-page-by-page", e)
+    
+    # Método 3: Tentar com pdfminer.six (fallback 2)
+    if not text.strip():
+        try:
+            app.logger.info("Tentando extração com pdfminer.six")
+            from pdfminer.high_level import extract_text as pdfminer_extract_text
+            
+            # Resetar o ponteiro do arquivo se for um objeto arquivo
+            if hasattr(pdf_file, 'seek'):
+                pdf_file.seek(0)  # Reset file pointer
+            
+            pdfminer_text = ""
+            
+            try:
+                # Tentar extrair o texto completo primeiro
+                pdfminer_text = pdfminer_extract_text(pdf_file)
+            except Exception as pm_error:
+                app.logger.warning(f"Erro ao extrair texto completo com pdfminer: {str(pm_error)}")
+                # Se falhar, tentar com configurações mais tolerantes
+                try:
+                    from pdfminer.high_level import extract_text_to_fp
+                    from pdfminer.layout import LAParams
+                    output_string = io.StringIO()
                     
-                    if text.strip():
-                        app.logger.info("Extração página por página bem-sucedida")
-                        return text
-                except Exception as detailed_error:
-                    app.logger.warning(f"Falha na extração página por página: {str(detailed_error)}")
-    except Exception as e:
-        error_msg = f"Erro ao extrair texto com pdfminer.six: {str(e)}"
-        app.logger.warning(error_msg)
-        errors.append(error_msg)
+                    # Resetar o ponteiro do arquivo se for um objeto arquivo
+                    if hasattr(pdf_file, 'seek'):
+                        pdf_file.seek(0)
+                        
+                    extract_text_to_fp(pdf_file, output_string, laparams=LAParams(char_margin=10.0, line_margin=0.5, word_margin=0.1))
+                    pdfminer_text = output_string.getvalue()
+                except Exception as pm_fallback_error:
+                    log_attempt("pdfminer-fallback", pm_fallback_error)
+            
+            if pdfminer_text.strip():
+                text = pdfminer_text
+                app.logger.info(f"Extração pdfminer.six bem-sucedida: {len(text)} caracteres")
+            else:
+                log_attempt("pdfminer.six", "Nenhum texto extraído")
+        except Exception as e:
+            log_attempt("pdfminer.six", e)
     
-    # Método 3: Tentar extrair texto bruto como último recurso
-    try:
-        app.logger.info("Tentando extração de texto bruto como último recurso")
-        with open(pdf_file, 'rb') as pdf_file_obj:
-            content = pdf_file_obj.read()
+    # Método 4: Extrair bytes de texto bruto como último recurso
+    if not text.strip():
+        try:
+            app.logger.info("Tentando extração de texto bruto como último recurso")
             
-            # Procurar por strings de texto no arquivo bruto
-            printable_chars = re.findall(b'[\x20-\x7E\n\r\t]+', content)
-            raw_text = b''.join(printable_chars).decode('utf-8', errors='ignore')
+            # Ler o conteúdo bruto do arquivo
+            if hasattr(pdf_file, 'read') and hasattr(pdf_file, 'seek'):
+                pdf_file.seek(0)
+                raw_content = pdf_file.read()
+            elif isinstance(pdf_file, str) and os.path.exists(pdf_file):
+                with open(pdf_file, 'rb') as f:
+                    raw_content = f.read()
+            else:
+                raw_content = b''
+                log_attempt("raw-extraction", "Não foi possível ler o arquivo")
             
-            # Limpar o texto bruto
-            raw_text = sanitize_text(raw_text)
-            
-            # Remover linhas muito curtas que provavelmente são lixo
-            raw_text = '\n'.join([line for line in raw_text.split('\n') if len(line.strip()) > 3])
-            
-            if raw_text.strip():
-                app.logger.info("Extração de texto bruto bem-sucedida")
-                return raw_text
-    except Exception as e:
-        error_msg = f"Erro na extração de texto bruto: {str(e)}"
-        app.logger.warning(error_msg)
-        errors.append(error_msg)
+            if raw_content:
+                # Procurar por strings de texto no arquivo bruto
+                printable_chars = re.findall(b'[\x20-\x7E\n\r\t]+', raw_content)
+                raw_text = b''.join(printable_chars).decode('utf-8', errors='ignore')
+                
+                # Filtrar o texto bruto para obter um resultado mais limpo
+                filtered_lines = []
+                for line in raw_text.split('\n'):
+                    line = line.strip()
+                    # Manter apenas linhas com texto significativo (pelo menos 20 caracteres ou contendo palavras-chave)
+                    if len(line) >= 20 or re.search(r'abstract|introduction|conclusion|references|method', line.lower()):
+                        filtered_lines.append(line)
+                
+                raw_text = '\n'.join(filtered_lines)
+                
+                if raw_text.strip():
+                    text = raw_text
+                    app.logger.info(f"Extração de texto bruto bem-sucedida: {len(text)} caracteres")
+                else:
+                    log_attempt("raw-extraction", "Texto extraído não contém conteúdo significativo")
+            else:
+                log_attempt("raw-extraction", "Sem conteúdo para extração")
+        except Exception as e:
+            log_attempt("raw-extraction", e)
     
-    # Se chegamos aqui, todos os métodos falharam, mas vamos retornar qualquer texto que tenhamos conseguido
-    if text and text.strip():
-        app.logger.warning("Retornando texto parcial após falhas nos métodos principais")
-        return text
+    # Verificar se conseguimos extrair algum texto
+    if not text.strip():
+        error_message = f"Falha ao extrair texto do PDF. Métodos tentados: {', '.join(extraction_methods_tried)}. Erros: {'; '.join(errors)}"
+        app.logger.error(error_message)
+        raise Exception(error_message)
     
-    # Se realmente não conseguimos nada, lançar exceção
-    error_details = "\n".join(errors)
-    app.logger.error(f"Falha em todos os métodos de extração de texto. Detalhes: {error_details}")
-    raise Exception(f"Não foi possível extrair texto do PDF. O arquivo pode estar corrompido ou protegido.")
+    # Sanitizar o texto antes de retornar
+    sanitized_text = sanitize_text(text)
+    app.logger.info(f"Texto extraído e sanitizado com sucesso: {len(sanitized_text)} caracteres")
+    return sanitized_text
 
 def process_large_text(text, max_size=MAX_CHUNK_SIZE):
     """Processa textos grandes dividindo em chunks ou resumindo conforme necessário"""
@@ -379,18 +476,27 @@ def chat_with_article():
     # Obter o ID do PDF da requisição
     pdf_id = data.get('pdf_id', None)
     if not pdf_id:
+        app.logger.warning(f"ID do PDF não fornecido na requisição de chat")
         return jsonify({"error": "Missing PDF ID"}), 400
     
+    app.logger.info(f"Usando PDF ID para chat: {pdf_id}")
+    
+    # Verificar se o ID existe no armazenamento
+    if pdf_id not in pdf_text_storage:
+        app.logger.warning(f"ID do PDF {pdf_id} não encontrado no armazenamento")
+        return jsonify({"error": "PDF not found. Please upload a PDF first."}), 400
+    
     # Obter o texto do PDF do armazenamento
-    pdf_text = pdf_text_storage.get(pdf_id, None)
+    pdf_text = pdf_text_storage.get(pdf_id, "")
     
     # Verificar se temos algum texto de PDF para analisar
     if not pdf_text or pdf_text.strip() == "":
-        app.logger.warning("Tentativa de chat sem PDF carregado")
-        return jsonify({"error": "No article context found. Please upload a PDF first."}), 400
+        app.logger.warning("Tentativa de chat sem PDF carregado (texto vazio)")
+        return jsonify({"error": "No article content found. Please upload a PDF first."}), 400
     
     # Atualizar timestamp para evitar que o PDF expire durante o chat
     pdf_timestamp_storage[pdf_id] = time.time()
+    app.logger.info(f"PDF encontrado com {len(pdf_text)} caracteres")
     
     try:
         # Processar o texto se for muito grande
@@ -450,31 +556,53 @@ def check_pdf_status():
     # Executar limpeza de PDFs antigos
     cleanup_old_pdfs()
     
-    # Obter o ID do PDF da requisição
+    # Verificar se temos um ID no armazenamento temporário
     pdf_id = request.args.get('pdf_id', None)
+    app.logger.info(f"Verificando status do PDF com ID: {pdf_id if pdf_id else 'Nenhum ID fornecido'}")
+    
+    # Se não tiver ID na requisição mas tiver na sessão, usar o da sessão
+    if not pdf_id and 'pdf_id' in session:
+        pdf_id = session.get('pdf_id')
+        app.logger.info(f"Usando ID do PDF da sessão: {pdf_id}")
+    
     if not pdf_id:
-        return jsonify({"error": "Missing PDF ID"}), 400
+        app.logger.info("Nenhum ID de PDF disponível")
+        return jsonify({
+            "success": False,
+            "pdf_uploaded": False,
+            "message": "Nenhum ID de PDF fornecido"
+        })
     
-    # Verificar se temos um PDF carregado no armazenamento
-    pdf_text = pdf_text_storage.get(pdf_id, None)
+    # Verificar se o PDF existe no armazenamento
+    pdf_exists = pdf_id in pdf_text_storage and pdf_text_storage[pdf_id].strip() != ""
     
-    has_pdf = bool(pdf_text and pdf_text.strip() != "")
-    
-    # Garantir que has_pdf é False se não houver texto de PDF válido
-    if not has_pdf and pdf_id in pdf_text_storage:
-        # Limpar qualquer dado residual
-        pdf_text_storage[pdf_id] = ""
-        if pdf_id in pdf_timestamp_storage:
-            del pdf_timestamp_storage[pdf_id]
-        app.logger.info("Status do PDF: Nenhum PDF carregado")
-    elif has_pdf:
-        # Atualizar timestamp para evitar que o PDF expire durante a verificação
+    if pdf_exists:
+        app.logger.info(f"PDF encontrado com ID: {pdf_id}")
+        # Atualizar o timestamp para evitar que o PDF seja removido durante a sessão do usuário
         pdf_timestamp_storage[pdf_id] = time.time()
-        app.logger.info(f"Status do PDF: PDF carregado com {len(pdf_text)} caracteres")
-    
-    return jsonify({
-        "has_pdf": has_pdf
-    })
+        
+        # Recuperar nome do arquivo se disponível
+        filename = session.get('filename', None)
+        
+        return jsonify({
+            "success": True,
+            "pdf_uploaded": True,
+            "pdf_id": pdf_id,
+            "filename": filename,
+            "message": "PDF encontrado",
+            "summary": session.get('summary', "")
+        })
+    else:
+        app.logger.warning(f"PDF com ID {pdf_id} não encontrado no armazenamento")
+        # Limpar o ID da sessão se não encontrarmos o PDF
+        if 'pdf_id' in session:
+            session.pop('pdf_id')
+        
+        return jsonify({
+            "success": False,
+            "pdf_uploaded": False,
+            "message": "PDF não encontrado no armazenamento"
+        })
 
 @app.route('/clear-pdf', methods=['POST'])
 def clear_pdf():
@@ -495,6 +623,62 @@ def clear_pdf():
         "success": True,
         "message": "PDF data cleared successfully"
     })
+
+@app.route('/upload', methods=['POST'])
+def upload_pdf():
+    # Executar limpeza de PDFs antigos
+    cleanup_old_pdfs()
+    
+    if 'pdfFile' not in request.files:
+        app.logger.warning("Tentativa de upload sem arquivo")
+        return jsonify({"error": "No file part"}), 400
+    
+    file = request.files['pdfFile']
+    
+    if file.filename == '':
+        app.logger.warning("Tentativa de upload com nome de arquivo vazio")
+        return jsonify({"error": "No selected file"}), 400
+    
+    if not file.filename.lower().endswith('.pdf'):
+        app.logger.warning(f"Tentativa de upload de arquivo não-PDF: {file.filename}")
+        return jsonify({"error": "File must be a PDF"}), 400
+    
+    try:
+        # Gerar um ID único para este PDF
+        pdf_id = str(uuid.uuid4())
+        app.logger.info(f"Processando upload de PDF. ID gerado: {pdf_id}")
+
+        # Criar um arquivo temporário para armazenar o PDF
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        file.save(temp_file.name)
+        temp_file.close()
+        
+        app.logger.info(f"PDF salvo temporariamente em {temp_file.name}")
+        
+        # Extrair e processar o texto do PDF
+        extracted_text = extract_text_from_pdf(temp_file.name)
+        
+        # Salvar o texto extraído e o timestamp no armazenamento
+        pdf_text_storage[pdf_id] = extracted_text
+        pdf_timestamp_storage[pdf_id] = time.time()
+        
+        # Salvar o ID do PDF e o nome do arquivo na sessão
+        session['pdf_id'] = pdf_id
+        session['filename'] = file.filename
+
+        # Limpar arquivo temporário
+        os.unlink(temp_file.name)
+        
+        # Resumir o conteúdo do artigo para apresentar na interface
+        return jsonify({
+            "success": True,
+            "pdf_id": pdf_id,
+            "filename": file.filename,
+            "message": "PDF uploaded successfully"
+        })
+    except Exception as e:
+        app.logger.error(f"Erro no upload de PDF: {str(e)}")
+        return jsonify({"error": f"Error uploading PDF: {str(e)}"}), 500
 
 def create_scientific_analysis_prompt(pdf_text, criteria):
     """Create a prompt for scientific article analysis based on selected criteria"""
