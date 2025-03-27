@@ -369,8 +369,10 @@ def chat_with_article():
     cleanup_old_pdfs()
     
     data = request.json
+    app.logger.info(f"Dados recebidos na requisição de chat: {data}")
     
     if not data or 'question' not in data:
+        app.logger.error("Requisição de chat sem pergunta")
         return jsonify({"error": "Missing question"}), 400
     
     question = data['question']
@@ -379,15 +381,21 @@ def chat_with_article():
     # Obter o ID do PDF da requisição
     pdf_id = data.get('pdf_id', None)
     if not pdf_id:
+        app.logger.error("Requisição de chat sem PDF ID")
         return jsonify({"error": "Missing PDF ID"}), 400
+    
+    app.logger.info(f"PDF ID recebido: {pdf_id}")
+    app.logger.info(f"PDFs armazenados: {list(pdf_text_storage.keys())}")
     
     # Obter o texto do PDF do armazenamento
     pdf_text = pdf_text_storage.get(pdf_id, None)
     
     # Verificar se temos algum texto de PDF para analisar
     if not pdf_text or pdf_text.strip() == "":
-        app.logger.warning("Tentativa de chat sem PDF carregado")
+        app.logger.warning(f"Tentativa de chat sem PDF carregado para o ID: {pdf_id}")
         return jsonify({"error": "No article context found. Please upload a PDF first."}), 400
+    
+    app.logger.info(f"Texto do PDF encontrado para o ID {pdf_id}: {len(pdf_text)} caracteres")
     
     # Atualizar timestamp para evitar que o PDF expire durante o chat
     pdf_timestamp_storage[pdf_id] = time.time()
