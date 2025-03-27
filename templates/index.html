@@ -1371,6 +1371,11 @@
                     return;
                 }
                 
+                if (!currentPdfId) {
+                    showError('Sem PDF carregado. Por favor, faça upload de um arquivo PDF primeiro.');
+                    return;
+                }
+                
                 // Adicionar mensagem do usuário ao chat
                 addMessage(question, 'user');
                 chatInput.value = '';
@@ -1384,12 +1389,16 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
                 
                 // Enviar a pergunta para o backend
+                console.log('Enviando chat com PDF ID:', currentPdfId); // Adicionar log para debug
                 fetch('/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ question: question, pdf_id: currentPdfId })
+                    body: JSON.stringify({ 
+                        question: question,
+                        pdf_id: currentPdfId 
+                    })
                 })
                 .then(response => {
                     if (!response.ok) {
