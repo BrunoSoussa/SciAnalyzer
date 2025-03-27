@@ -1190,7 +1190,8 @@
                     
                     // Continue with the analysis after clearing previous data
                     const formData = new FormData();
-                    formData.append('file', pdfFileInput.files[0]);
+                    const pdfFile = pdfFileInput.files[0];
+                    formData.append('file', pdfFile);
                     formData.append('criteria', JSON.stringify(selectedCriteria));
                     
                     // Mostrar loader e mensagem de status
@@ -1236,12 +1237,20 @@
                         
                         // Rolar para o topo dos resultados
                         result.scrollIntoView({ behavior: 'smooth' });
+                        
+                        // Permitir selecionar um novo arquivo após análise concluída
+                        pdfFileInput.value = '';
                     })
                     .catch(error => {
                         loader.style.display = 'none';
                         statusMessage.textContent = 'Erro: ' + error.message;
                         statusMessage.style.color = 'var(--danger)';
+                        pdfFileInput.value = '';
                     });
+                })
+                .catch(error => {
+                    console.error('Erro ao limpar dados do PDF anterior:', error);
+                    pdfFileInput.value = '';
                 });
             });
             

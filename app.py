@@ -87,6 +87,9 @@ def analyze_pdf():
         
         # Check if any text was extracted
         if not pdf_text or pdf_text.strip() == "":
+            # Limpar dados em caso de erro
+            pdf_text_storage = ""
+            session.pop('pdf_text', None)
             return jsonify({"error": "No text could be extracted from the PDF. The file might be scanned or contain only images."}), 400
         
         # If the PDF text is too long, truncate it to avoid exceeding Gemini's token limit
@@ -99,14 +102,7 @@ def analyze_pdf():
         
         # Generate response from Gemini
         response = model.generate_content(prompt)
-        res = jsonify({
-            "success": True,
-            "criteria": criteria,
-            "answer": response.text,
-            "pdf_length": len(pdf_text),
-            "has_pdf": True
-        })
-        print(res)
+        
         return jsonify({
             "success": True,
             "criteria": criteria,
@@ -116,6 +112,10 @@ def analyze_pdf():
         })
         
     except Exception as e:
+        # Limpar dados em caso de erro
+        pdf_text_storage = ""
+        session.pop('pdf_text', None)
+        
         app.logger.error(f"Error processing PDF: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({"error": f"Error processing PDF: {str(e)}"}), 500
@@ -189,6 +189,9 @@ def clear_pdf():
     # Clear PDF text from both session and global variable
     pdf_text_storage = ""
     session.pop('pdf_text', None)
+    
+    # Garantir que a sessão seja salva
+    session.modified = True
     
     return jsonify({
         "success": True,
