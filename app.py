@@ -48,6 +48,10 @@ def health_check():
 def analyze_pdf():
     global pdf_text_storage
     
+    # Clear previous PDF text storage
+    pdf_text_storage = ""
+    session.pop('pdf_text', None)
+    
     # Check if a file was uploaded
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -168,8 +172,27 @@ def check_pdf_status():
     
     has_pdf = bool(pdf_text and pdf_text.strip() != "")
     
+    # Garantir que has_pdf é False se não houver texto de PDF válido
+    if not has_pdf:
+        # Limpar qualquer dado residual
+        pdf_text_storage = ""
+        session.pop('pdf_text', None)
+    
     return jsonify({
         "has_pdf": has_pdf
+    })
+
+@app.route('/clear-pdf', methods=['POST'])
+def clear_pdf():
+    global pdf_text_storage
+    
+    # Clear PDF text from both session and global variable
+    pdf_text_storage = ""
+    session.pop('pdf_text', None)
+    
+    return jsonify({
+        "success": True,
+        "message": "PDF data cleared successfully"
     })
 
 def create_scientific_analysis_prompt(pdf_text, criteria):

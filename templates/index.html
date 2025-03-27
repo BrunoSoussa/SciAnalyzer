@@ -704,6 +704,7 @@
             margin-top: 2.5rem;
             border-top: 1px solid var(--gray-200);
             padding-top: 1.75rem;
+            display: none;
         }
         
         .chat-messages {
@@ -1029,7 +1030,7 @@
                         <div id="answer" class="analysis-content"></div>
                     </div>
                     
-                    <div class="chat-container" id="chatContainer" style="display: none;">
+                    <div class="chat-container" id="chatContainer">
                         <h3 class="analysis-title"><i class="fas fa-comments"></i> Pergunte sobre o artigo</h3>
                         <div class="chat-messages" id="chatMessages"></div>
                         <div class="chat-input">
@@ -1064,8 +1065,12 @@
             let pdfUploaded = false;
             let isFullscreen = false;
             
-            // Verificar se já existe um PDF carregado
-            checkPdfStatus();
+            // Inicialmente esconder o container de chat e resultado
+            chatContainer.style.display = 'none';
+            result.style.display = 'none';
+            
+            // Não verificar automaticamente o status do PDF ao carregar a página
+            // checkPdfStatus();
             
             // Desabilitar o botão de análise até que um arquivo seja selecionado
             analyzeBtn.disabled = true;
@@ -1148,7 +1153,13 @@
                             pdfUploaded = true;
                             noPdfAlert.style.display = 'none';
                             result.style.display = 'block';
-                            chatContainer.style.display = 'block';
+                            // Não mostrar automaticamente o chat aqui
+                            // chatContainer.style.display = 'block';
+                        } else {
+                            pdfUploaded = false;
+                            chatContainer.style.display = 'none';
+                            result.style.display = 'none';
+                            noPdfAlert.style.display = 'block';
                         }
                     })
                     .catch(error => console.error('Erro ao verificar status do PDF:', error));
@@ -1160,68 +1171,77 @@
                     return;
                 }
                 
-                // Obter critérios selecionados
-                const selectedCriteria = [];
-                document.querySelectorAll('input[name="criteria"]:checked').forEach(checkbox => {
-                    selectedCriteria.push(checkbox.value);
-                });
-                
-                if (selectedCriteria.length === 0) {
-                    showError('Por favor, selecione pelo menos um critério de análise.');
-                    return;
-                }
-                
-                const formData = new FormData();
-                formData.append('file', pdfFileInput.files[0]);
-                formData.append('criteria', JSON.stringify(selectedCriteria));
-                
-                // Mostrar loader e mensagem de status
-                loader.style.display = 'block';
-                statusMessage.textContent = 'Analisando o artigo... Isso pode levar alguns minutos.';
-                statusMessage.style.display = 'block';
-                statusMessage.style.color = 'var(--gray-600)';
-                result.style.display = 'none';
-                chatContainer.style.display = 'none';
-                
-                fetch('/analyze', {
-                    method: 'POST',
-                    body: formData
+                // Clear previous PDF data before analyzing new file
+                fetch('/clear-pdf', {
+                    method: 'POST'
                 })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Erro ao analisar o PDF');
+                .then(response => response.json())
+                .then(() => {
+                    // Obter critérios selecionados
+                    const selectedCriteria = [];
+                    document.querySelectorAll('input[name="criteria"]:checked').forEach(checkbox => {
+                        selectedCriteria.push(checkbox.value);
+                    });
+                    
+                    if (selectedCriteria.length === 0) {
+                        showError('Por favor, selecione pelo menos um critério de análise.');
+                        return;
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    // Processar e exibir a resposta
-                    pdfUploaded = true;
-                    loader.style.display = 'none';
-                    result.style.display = 'block';
-                    chatContainer.style.display = 'block';
-                    noPdfAlert.style.display = 'none';
-                    statusMessage.style.display = 'none';
                     
-                    // Formatar a resposta para melhor visualização
-                    let formattedAnswer = formatAnalysisOutput(data.answer, selectedCriteria);
-                    answer.innerHTML = formattedAnswer;
+                    // Continue with the analysis after clearing previous data
+                    const formData = new FormData();
+                    formData.append('file', pdfFileInput.files[0]);
+                    formData.append('criteria', JSON.stringify(selectedCriteria));
                     
-                    // Adicionar classe de animação para fade-in
-                    result.classList.add('fade-in');
-                    chatContainer.classList.add('fade-in');
+                    // Mostrar loader e mensagem de status
+                    loader.style.display = 'block';
+                    statusMessage.textContent = 'Analisando o artigo... Isso pode levar alguns minutos.';
+                    statusMessage.style.display = 'block';
+                    statusMessage.style.color = 'var(--gray-600)';
+                    result.style.display = 'none';
+                    chatContainer.style.display = 'none';
                     
-                    // Ativar modo tela cheia automaticamente quando a análise for concluída
-                    document.body.classList.add('fullscreen-mode');
-                    isFullscreen = true;
-                    fullscreenToggle.innerHTML = '<i class="fas fa-compress"></i> <span>Sair da tela cheia</span>';
-                    
-                    // Rolar para o topo dos resultados
-                    result.scrollIntoView({ behavior: 'smooth' });
-                })
-                .catch(error => {
-                    loader.style.display = 'none';
-                    statusMessage.textContent = 'Erro: ' + error.message;
-                    statusMessage.style.color = 'var(--danger)';
+                    fetch('/analyze', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Erro ao analisar o PDF');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Processar e exibir a resposta
+                        pdfUploaded = true;
+                        loader.style.display = 'none';
+                        result.style.display = 'block';
+                        // Só mostrar o chat após uma análise bem-sucedida
+                        chatContainer.style.display = 'block';
+                        noPdfAlert.style.display = 'none';
+                        statusMessage.style.display = 'none';
+                        
+                        // Formatar a resposta para melhor visualização
+                        let formattedAnswer = formatAnalysisOutput(data.answer, selectedCriteria);
+                        answer.innerHTML = formattedAnswer;
+                        
+                        // Adicionar classe de animação para fade-in
+                        result.classList.add('fade-in');
+                        chatContainer.classList.add('fade-in');
+                        
+                        // Ativar modo tela cheia automaticamente quando a análise for concluída
+                        document.body.classList.add('fullscreen-mode');
+                        isFullscreen = true;
+                        fullscreenToggle.innerHTML = '<i class="fas fa-compress"></i> <span>Sair da tela cheia</span>';
+                        
+                        // Rolar para o topo dos resultados
+                        result.scrollIntoView({ behavior: 'smooth' });
+                    })
+                    .catch(error => {
+                        loader.style.display = 'none';
+                        statusMessage.textContent = 'Erro: ' + error.message;
+                        statusMessage.style.color = 'var(--danger)';
+                    });
                 });
             });
             
