@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Analisador de Artigos Científicos com IA - Avalie artigos científicos usando Gemini AI">
+    <meta name="theme-color" content="#4f46e5">
+    <title>SciAnalyzer - Analisador de Artigos Científicos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* Modern color palette */
+            --primary: #4f46e5;
+            --primary-dark: #3730a3;
+            --primary-light: #818cf8;
+            --secondary: #0ea5e9;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            
+            /* Neutral colors */
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            
+            /* Design variables */
+            --radius-sm: 0.25rem;
+            --radius: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+            --radius-xl: 1rem;
+            
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            
+            --transition: all 0.2s ease;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: var(--gray-800);
+            background-color: var(--gray-100);
+            min-height: 100vh;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+        
+        .app-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            position: relative;
+        }
+        
+        .app-title {
+            font-family: 'Poppins', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.025em;
+        }
+        
+        .app-description {
+            color: var(--gray-600);
+            max-width: 600px;
+            margin: 0 auto;
+            font-size: 1.125rem;
+        }
+        
+        .app-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+        
+        @media (min-width: 1024px) {
+            .app-layout {
+                grid-template-columns: 400px 1fr;
+            }
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+            height: fit-content;
+            border: 1px solid var(--gray-200);
+            transition: var(--transition);
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+        
+        @media (min-width: 1024px) {
+            .results-card {
+                max-height: 85vh;
+                display: flex;
+                flex-direction: column;
+            }
+            
+            .results-card .card-body {
+                flex: 1;
+                overflow-y: auto;
+                padding-right: 1.25rem;
+            }
+        }
+        
+        .card-header {
+            padding: 1.25rem 1.5rem;
+            background-color: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .card-title {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--gray-900);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .card-title i {
+            color: var(--primary);
+            font-size: 1.125rem;
+        }
+        
+        .card-body {
+            padding: 1.75rem;
+            overflow: auto;
+        }
+        
+        .form-group {
+            margin-bottom: 1.75rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.625rem;
+            font-weight: 500;
+            color: var(--gray-700);
+            font-size: 0.9375rem;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 1rem;
+            color: var(--gray-800);
+            transition: var(--transition);
+            background-color: var(--gray-50);
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+            background-color: white;
+        }
+        
+        .form-input[type="file"] {
+            padding: 0.625rem;
+            background-color: var(--gray-50);
+            border: 2px dashed var(--gray-300);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .form-input[type="file"]:hover {
+            border-color: var(--primary-light);
+            background-color: rgba(79, 70, 229, 0.05);
+        }
+        
+        .file-upload-container {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+        
+        .file-upload-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1.5rem;
+            border: 2px dashed var(--gray-300);
+            border-radius: var(--radius);
+            background-color: var(--gray-50);
+            transition: var(--transition);
+            cursor: pointer;
+        }
+        
+        .file-upload-label:hover {
+            border-color: var(--primary-light);
+            background-color: rgba(79, 70, 229, 0.05);
+        }
+        
+        .file-upload-icon {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        
+        .file-upload-text {
+            font-weight: 500;
+            color: var(--gray-700);
+            text-align: center;
+        }
+        
+        .file-upload-info {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--gray-500);
+        }
+        
+        .file-upload-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .criteria-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-top: 0.75rem;
+        }
+        
+        .criteria-item {
+            position: relative;
+        }
+        
+        .criteria-checkbox {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .criteria-label {
+            display: flex;
+            align-items: center;
+            padding: 0.875rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 0.9375rem;
+            background-color: var(--gray-50);
+            height: 100%;
+        }
+        
+        .criteria-checkbox:checked + .criteria-label {
+            border-color: var(--primary);
+            background-color: rgba(79, 70, 229, 0.1);
+            color: var(--primary-dark);
+            font-weight: 500;
+        }
+        
+        .criteria-checkbox:focus + .criteria-label {
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+        }
+        
+        .criteria-label:before {
+            content: '';
+            width: 1.125rem;
+            height: 1.125rem;
+            border: 2px solid var(--gray-400);
+            border-radius: var(--radius-sm);
+            margin-right: 0.75rem;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+        
+        .criteria-checkbox:checked + .criteria-label:before {
+            border-color: var(--primary);
+            background-color: var(--primary);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white' width='24px' height='24px'%3E%3Cpath d='M0 0h24v24H0z' fill='none'/%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E");
+            background-size: 0.75rem;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.625rem;
+            padding: 0.875rem 1.5rem;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(1px);
+        }
+        
+        .btn-primary:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4);
+        }
+        
+        .btn-block {
+            width: 100%;
+        }
+        
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-icon {
+            font-size: 1.125rem;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.625rem;
+            margin-top: 1.25rem;
+            font-size: 0.9375rem;
+            color: var(--gray-600);
+            background-color: var(--gray-50);
+            padding: 0.75rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--gray-200);
+        }
+        
+        .spinner {
+            display: none;
+            width: 2rem;
+            height: 2rem;
+            border: 3px solid rgba(79, 70, 229, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .alert {
+            padding: 1.25rem 1.5rem;
+            border-radius: var(--radius);
+            margin-bottom: 1.75rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .alert-icon {
+            flex-shrink: 0;
+            margin-top: 0.125rem;
+            font-size: 1.25rem;
+        }
+        
+        .alert-content {
+            flex: 1;
+        }
+        
+        .alert-title {
+            font-weight: 600;
+            margin-bottom: 0.375rem;
+            font-size: 1.125rem;
+        }
+        
+        .alert-info {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-left: 4px solid var(--info);
+        }
+        
+        .alert-info .alert-icon {
+            color: var(--info);
+        }
+        
+        .alert-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border-left: 4px solid var(--warning);
+        }
+        
+        .alert-warning .alert-icon {
+            color: var(--warning);
+        }
+        
+        .alert-error {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid var(--danger);
+        }
+        
+        .alert-error .alert-icon {
+            color: var(--danger);
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--gray-200);
+            margin-bottom: 1.75rem;
+            background-color: var(--gray-50);
+            border-radius: var(--radius) var(--radius) 0 0;
+            overflow: hidden;
+        }
+        
+        .tab {
+            padding: 1rem 1.5rem;
+            font-weight: 500;
+            color: var(--gray-600);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            background-color: white;
+        }
+        
+        .tab:hover:not(.active) {
+            background-color: var(--gray-100);
+            color: var(--gray-800);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .analysis-header {
+            margin-bottom: 1.75rem;
+            position: relative;
+        }
+        
+        .analysis-title {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+        }
+        
+        .criteria-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+        
+        .criteria-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.375rem 0.875rem;
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+            border-radius: 9999px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+        }
+        
+        /* Analysis content styles */
+        .analysis-content {
+            line-height: 1.7;
+            color: var(--gray-800);
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            hyphens: auto;
+            max-width: 100%;
+            font-size: 1rem;
+        }
+        
+        .analysis-content h4 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin: 1.75rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--gray-200);
+            display: block;
+            width: 100%;
+        }
+        
+        .analysis-content h4:first-child {
+            margin-top: 0;
+        }
+        
+        .analysis-content p {
+            margin-bottom: 1.25rem;
+            max-width: 100%;
+        }
+        
+        .analysis-content ul, 
+        .analysis-content ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1.5rem;
+            max-width: 100%;
+            padding-right: 1rem;
+        }
+        
+        .analysis-content li {
+            margin-bottom: 0.625rem;
+            max-width: 100%;
+        }
+        
+        .analysis-content strong {
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+        
+        .analysis-section {
+            margin-bottom: 2.25rem;
+            padding-bottom: 1.25rem;
+            border-bottom: 1px solid var(--gray-200);
+            max-width: 100%;
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        .analysis-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .main-section-title {
+            color: var(--primary) !important;
+            font-size: 1.375rem !important;
+        }
+        
+        /* Table styles */
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+        }
+        
+        .table th {
+            background-color: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 2px solid #dee2e6;
+            white-space: nowrap;
+            font-size: 0.95rem;
+            vertical-align: middle;
+        }
+        
+        .table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: middle;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .table th,
+            .table td {
+                padding: 8px 12px;
+                font-size: 0.85rem;
+            }
+        }
+        
+        /* Ensure table headers don't overflow */
+        .table th {
+            max-width: 250px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Add hover effect for better readability */
+        .table th:hover {
+            background-color: #f1f3f5;
+        }
+        
+        /* Keyword highlighting */
+        .keyword-yes {
+            color: var(--success);
+            font-weight: 600;
+            background-color: rgba(16, 185, 129, 0.1);
+            padding: 0.125rem 0.375rem;
+            border-radius: var(--radius-sm);
+        }
+        
+        .keyword-no {
+            color: var(--danger);
+            font-weight: 600;
+            background-color: rgba(239, 68, 68, 0.1);
+            padding: 0.125rem 0.375rem;
+            border-radius: var(--radius-sm);
+        }
+        
+        .keyword-partial {
+            color: var(--warning);
+            font-weight: 600;
+            background-color: rgba(245, 158, 11, 0.1);
+            padding: 0.125rem 0.375rem;
+            border-radius: var(--radius-sm);
+        }
+        
+        /* Summary box */
+        .summary-box {
+            background-color: var(--gray-50);
+            border-left: 4px solid var(--info);
+            padding: 1.25rem;
+            margin: 1.75rem 0;
+            border-radius: 0 var(--radius) var(--radius) 0;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .summary-box h4 {
+            margin-top: 0;
+            color: var(--info);
+            border-bottom: none;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        
+        /* Chat styles */
+        .chat-container {
+            margin-top: 2.5rem;
+            border-top: 1px solid var(--gray-200);
+            padding-top: 1.75rem;
+        }
+        
+        .chat-messages {
+            max-height: 450px;
+            overflow-y: auto;
+            margin-bottom: 1.25rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            background-color: var(--gray-50);
+            padding: 1.25rem;
+        }
+        
+        .chat-input {
+            display: flex;
+            gap: 0.75rem;
+        }
+        
+        .message {
+            margin-bottom: 1.25rem;
+            padding: 1rem 1.25rem;
+            border-radius: var(--radius-lg);
+            max-width: 85%;
+            position: relative;
+            line-height: 1.5;
+            box-shadow: var(--shadow-sm);
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        .user-message {
+            background-color: var(--primary-light);
+            color: var(--gray-900);
+            align-self: flex-end;
+            margin-left: auto;
+            border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
+        }
+        
+        .ai-message {
+            background-color: white;
+            color: var(--gray-800);
+            align-self: flex-start;
+            margin-right: auto;
+            border-radius: 0 var(--radius-lg) var(--radius-lg) var(--radius-lg);
+            border: 1px solid var(--gray-200);
+        }
+        
+        /* Estilos para seções principais */
+        .main-section {
+            background-color: var(--gray-50);
+            padding: 1rem;
+            border-radius: var(--radius);
+        }
+        
+        .main-section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Estilos para modo tela cheia */
+        .fullscreen-mode .app-layout {
+            grid-template-columns: 1fr !important;
+        }
+        
+        .fullscreen-mode .config-card {
+            display: none;
+        }
+        
+        .fullscreen-mode .results-card {
+            max-height: 90vh;
+        }
+        
+        .fullscreen-mode .app-header {
+            margin-bottom: 1rem;
+        }
+        
+        .fullscreen-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-left: auto;
+            cursor: pointer;
+            color: var(--gray-600);
+            font-size: 0.875rem;
+            transition: var(--transition);
+        }
+        
+        .fullscreen-toggle:hover {
+            color: var(--primary);
+        }
+        
+        .fullscreen-toggle i {
+            font-size: 1rem;
+        }
+        
+        .back-to-config {
+            display: none;
+            margin-bottom: 1rem;
+        }
+        
+        .fullscreen-mode .back-to-config {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background-color: var(--gray-100);
+            border-radius: var(--radius);
+            cursor: pointer;
+            color: var(--gray-700);
+            font-weight: 500;
+            transition: var(--transition);
+        }
+        
+        .fullscreen-mode .back-to-config:hover {
+            background-color: var(--gray-200);
+            color: var(--primary);
+        }
+        
+        .file-name {
+            font-weight: 500;
+            color: var(--primary);
+            word-break: break-all;
+        }
+        
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            background-color: var(--gray-50);
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--gray-200);
+        }
+        
+        .file-info i {
+            color: var(--primary);
+        }
+        
+        .back-to-config {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--primary);
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 0.9375rem;
+        }
+        
+        .back-to-config:hover {
+            background-color: rgba(79, 70, 229, 0.1);
+            transform: translateX(-2px);
+        }
+        
+        .fullscreen-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--gray-600);
+            font-size: 0.9375rem;
+            cursor: pointer;
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius);
+            transition: var(--transition);
+        }
+        
+        .fullscreen-toggle:hover {
+            color: var(--primary);
+            background-color: var(--gray-100);
+        }
+        
+        body.fullscreen-mode {
+            overflow: hidden;
+        }
+        
+        body.fullscreen-mode .container {
+            max-width: 100%;
+            height: 100vh;
+            padding: 0;
+        }
+        
+        body.fullscreen-mode .app-header {
+            display: none;
+        }
+        
+        body.fullscreen-mode .app-layout {
+            grid-template-columns: 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+        
+        body.fullscreen-mode .config-card {
+            display: none;
+        }
+        
+        body.fullscreen-mode .results-card {
+            max-height: 100vh;
+            height: 100vh;
+            border-radius: 0;
+            box-shadow: none;
+            border: none;
+        }
+        
+        body.fullscreen-mode .card-body {
+            max-height: calc(100vh - 60px);
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+        }
+        
+        /* Special styling for the analysis general cell */
+        .analysis-general-cell {
+            background-color: #f8f9fa;
+            font-weight: 500;
+            text-align: center;
+            padding: 12px 16px;
+            color: var(--primary-dark);
+            border-bottom: 2px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="app-header">
+            <h1 class="app-title">SciAnalyzer</h1>
+            <p class="app-description">Análise avançada de artigos científicos com inteligência artificial</p>
+        </div>
+        
+        <div class="app-layout">
+            <div class="card config-card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-file-upload"></i> Upload e Configuração</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label">Selecione um artigo científico</label>
+                        <div class="file-upload-container">
+                            <label class="file-upload-label" for="pdfFile">
+                                <i class="fas fa-file-pdf file-upload-icon"></i>
+                                <div class="file-upload-text">Arraste e solte um arquivo PDF ou clique para selecionar</div>
+                                <div class="file-upload-info">Formatos aceitos: PDF</div>
+                            </label>
+                            <input type="file" id="pdfFile" accept=".pdf" class="file-upload-input">
+                        </div>
+                        <div id="fileInfo" class="file-info" style="display: none;">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Arquivo selecionado: <span id="fileName" class="file-name"></span></span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Selecione os critérios para análise</label>
+                        <div class="criteria-grid">
+                            <div class="criteria-item">
+                                <input type="checkbox" id="title" name="criteria" value="title" class="criteria-checkbox">
+                                <label class="criteria-label" for="title">Título</label>
+                            </div>
+                            <div class="criteria-item">
+                                <input type="checkbox" id="abstract" name="criteria" value="abstract" class="criteria-checkbox">
+                                <label class="criteria-label" for="abstract">Resumo</label>
+                            </div>
+                            <div class="criteria-item">
+                                <input type="checkbox" id="introduction" name="criteria" value="introduction" class="criteria-checkbox">
+                                <label class="criteria-label" for="introduction">Introdução</label>
+                            </div>
+                            <div class="criteria-item">
+                                <input type="checkbox" id="eligibility" name="criteria" value="eligibility" class="criteria-checkbox">
+                                <label class="criteria-label" for="eligibility">Critérios de Elegibilidade</label>
+                            </div>
+                            <div class="criteria-item">
+                                <input type="checkbox" id="info_sources" name="criteria" value="info_sources" class="criteria-checkbox">
+                                <label class="criteria-label" for="info_sources">Fontes de Informação</label>
+                            </div>
+                            <div class="criteria-item">
+                                <input type="checkbox" id="search_strategy" name="criteria" value="search_strategy" class="criteria-checkbox">
+                                <label class="criteria-label" for="search_strategy">Estratégia de Pesquisa</label>
+                            </div>
+                            <div class="criteria-item">
+                                <input type="checkbox" id="selection_process" name="criteria" value="selection_process" class="criteria-checkbox">
+                                <label class="criteria-label" for="selection_process">Processo de Seleção</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary btn-block" id="analyzeBtn"><i class="fas fa-search btn-icon"></i> Analisar Artigo</button>
+                    <div class="status" id="statusMessage" style="display: none;"></div>
+                    
+                    <div class="spinner" id="loader">
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card results-card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-chart-line"></i> Resultados da Análise</h2>
+                    <div class="fullscreen-toggle" id="fullscreenToggle">
+                        <i class="fas fa-expand"></i> <span>Tela cheia</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="back-to-config" id="backToConfig">
+                        <i class="fas fa-arrow-left"></i> Voltar para configuração
+                    </div>
+                    
+                    <div id="noPdfAlert" class="alert alert-info">
+                        <i class="fas fa-info-circle alert-icon"></i>
+                        <div class="alert-content">
+                            <h4 class="alert-title">Faça o upload de um artigo científico</h4>
+                            <p>Selecione um artigo científico em PDF, escolha os critérios de análise e clique em "Analisar Artigo" para ver os resultados.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="result" id="result" style="display: none;">
+                        <h3 class="analysis-title"><i class="fas fa-clipboard-check"></i> Avaliação do Artigo</h3>
+                        <div id="answer" class="analysis-content"></div>
+                    </div>
+                    
+                    <div class="chat-container" id="chatContainer" style="display: none;">
+                        <h3 class="analysis-title"><i class="fas fa-comments"></i> Pergunte sobre o artigo</h3>
+                        <div class="chat-messages" id="chatMessages"></div>
+                        <div class="chat-input">
+                            <input type="text" id="chatInput" placeholder="Digite sua pergunta sobre o artigo..." class="form-input">
+                            <button class="btn btn-primary" id="sendBtn"><i class="fas fa-paper-plane"></i> Enviar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const pdfFileInput = document.getElementById('pdfFile');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const statusMessage = document.getElementById('statusMessage');
+            const loader = document.getElementById('loader');
+            const result = document.getElementById('result');
+            const answer = document.getElementById('answer');
+            const noPdfAlert = document.getElementById('noPdfAlert');
+            const chatContainer = document.getElementById('chatContainer');
+            const chatInput = document.getElementById('chatInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const chatMessages = document.getElementById('chatMessages');
+            const fullscreenToggle = document.getElementById('fullscreenToggle');
+            const backToConfig = document.getElementById('backToConfig');
+            const fileInfo = document.getElementById('fileInfo');
+            const fileName = document.getElementById('fileName');
+            const fileUploadLabel = document.querySelector('.file-upload-label');
+            
+            let pdfUploaded = false;
+            let isFullscreen = false;
+            
+            // Verificar se já existe um PDF carregado
+            checkPdfStatus();
+            
+            // Desabilitar o botão de análise até que um arquivo seja selecionado
+            analyzeBtn.disabled = true;
+            
+            // Adicionar efeito de arrastar e soltar para o upload de arquivos
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                fileUploadLabel.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                fileUploadLabel.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                fileUploadLabel.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight() {
+                fileUploadLabel.classList.add('file-upload-label-highlight');
+            }
+            
+            function unhighlight() {
+                fileUploadLabel.classList.remove('file-upload-label-highlight');
+            }
+            
+            fileUploadLabel.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    pdfFileInput.files = files;
+                    handleFileSelect();
+                } else {
+                    showError('Por favor, selecione um arquivo PDF válido.');
+                }
+            }
+            
+            function showError(message) {
+                statusMessage.textContent = message;
+                statusMessage.style.display = 'block';
+                statusMessage.style.color = 'var(--danger)';
+                setTimeout(() => {
+                    statusMessage.style.display = 'none';
+                }, 3000);
+            }
+            
+            pdfFileInput.addEventListener('change', handleFileSelect);
+            
+            function handleFileSelect() {
+                if (pdfFileInput.files.length > 0) {
+                    const file = pdfFileInput.files[0];
+                    if (file.type !== 'application/pdf') {
+                        showError('Por favor, selecione um arquivo PDF válido.');
+                        analyzeBtn.disabled = true;
+                        fileInfo.style.display = 'none';
+                        return;
+                    }
+                    
+                    analyzeBtn.disabled = false;
+                    fileInfo.style.display = 'flex';
+                    fileName.textContent = file.name;
+                } else {
+                    analyzeBtn.disabled = true;
+                    fileInfo.style.display = 'none';
+                }
+            }
+            
+            function checkPdfStatus() {
+                fetch('/check-pdf-status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.has_pdf) {
+                            pdfUploaded = true;
+                            noPdfAlert.style.display = 'none';
+                            result.style.display = 'block';
+                            chatContainer.style.display = 'block';
+                        }
+                    })
+                    .catch(error => console.error('Erro ao verificar status do PDF:', error));
+            }
+            
+            analyzeBtn.addEventListener('click', function() {
+                if (pdfFileInput.files.length === 0) {
+                    showError('Por favor, selecione um arquivo PDF.');
+                    return;
+                }
+                
+                // Obter critérios selecionados
+                const selectedCriteria = [];
+                document.querySelectorAll('input[name="criteria"]:checked').forEach(checkbox => {
+                    selectedCriteria.push(checkbox.value);
+                });
+                
+                if (selectedCriteria.length === 0) {
+                    showError('Por favor, selecione pelo menos um critério de análise.');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('file', pdfFileInput.files[0]);
+                formData.append('criteria', JSON.stringify(selectedCriteria));
+                
+                // Mostrar loader e mensagem de status
+                loader.style.display = 'block';
+                statusMessage.textContent = 'Analisando o artigo... Isso pode levar alguns minutos.';
+                statusMessage.style.display = 'block';
+                statusMessage.style.color = 'var(--gray-600)';
+                result.style.display = 'none';
+                chatContainer.style.display = 'none';
+                
+                fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erro ao analisar o PDF');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Processar e exibir a resposta
+                    pdfUploaded = true;
+                    loader.style.display = 'none';
+                    result.style.display = 'block';
+                    chatContainer.style.display = 'block';
+                    noPdfAlert.style.display = 'none';
+                    statusMessage.style.display = 'none';
+                    
+                    // Formatar a resposta para melhor visualização
+                    let formattedAnswer = formatAnalysisOutput(data.answer, selectedCriteria);
+                    answer.innerHTML = formattedAnswer;
+                    
+                    // Adicionar classe de animação para fade-in
+                    result.classList.add('fade-in');
+                    chatContainer.classList.add('fade-in');
+                    
+                    // Ativar modo tela cheia automaticamente quando a análise for concluída
+                    document.body.classList.add('fullscreen-mode');
+                    isFullscreen = true;
+                    fullscreenToggle.innerHTML = '<i class="fas fa-compress"></i> <span>Sair da tela cheia</span>';
+                    
+                    // Rolar para o topo dos resultados
+                    result.scrollIntoView({ behavior: 'smooth' });
+                })
+                .catch(error => {
+                    loader.style.display = 'none';
+                    statusMessage.textContent = 'Erro: ' + error.message;
+                    statusMessage.style.color = 'var(--danger)';
+                });
+            });
+            
+            sendBtn.addEventListener('click', sendChatMessage);
+            
+            chatInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendChatMessage();
+                }
+            });
+            
+            function sendChatMessage() {
+                const question = chatInput.value.trim();
+                
+                if (!question) {
+                    return;
+                }
+                
+                if (!pdfUploaded) {
+                    showError('Por favor, faça o upload de um artigo primeiro.');
+                    return;
+                }
+                
+                // Adicionar mensagem do usuário
+                addMessage(question, 'user');
+                chatInput.value = '';
+                
+                // Mostrar indicador de digitação
+                const typingIndicator = addMessage('<i class="fas fa-circle-notch fa-spin"></i> Processando...', 'ai');
+                
+                fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question: question })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Remover indicador de digitação
+                    typingIndicator.remove();
+                    
+                    // Adicionar resposta da IA
+                    addMessage(data.answer, 'ai');
+                })
+                .catch(error => {
+                    // Remover indicador de digitação
+                    typingIndicator.remove();
+                    
+                    // Adicionar mensagem de erro
+                    addMessage('Erro ao processar sua pergunta. Por favor, tente novamente.', 'ai');
+                });
+            }
+            
+            function addMessage(text, sender) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}-message fade-in`;
+                
+                // Formatar o texto da mensagem se for da IA
+                if (sender === 'ai') {
+                    messageDiv.innerHTML = formatChatMessage(text);
+                } else {
+                    messageDiv.textContent = text;
+                }
+                
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                return messageDiv;
+            }
+            
+            function formatAnalysisOutput(text, selectedCriteria) {
+                // Adicionar tags de critérios selecionados
+                let criteriaNames = {
+                    'title': 'Título',
+                    'abstract': 'Resumo',
+                    'introduction': 'Introdução',
+                    'eligibility': 'Critérios de Elegibilidade',
+                    'info_sources': 'Fontes de Informação',
+                    'search_strategy': 'Estratégia de Pesquisa',
+                    'selection_process': 'Processo de Seleção'
+                };
+                
+                let criteriaTagsHtml = '<div class="criteria-tags">';
+                selectedCriteria.forEach(criteria => {
+                    criteriaTagsHtml += `<span class="criteria-tag">${criteriaNames[criteria] || criteria}</span>`;
+                });
+                criteriaTagsHtml += '</div>';
+                
+                // Formatar texto
+                let formattedText = text;
+                
+                // Formatar tabelas primeiro
+                formattedText = formatTables(formattedText);
+                
+                // Destacar palavras-chave
+                formattedText = formattedText.replace(/\b(Sim|SIM|sim)\b/g, '<span class="keyword-yes">Sim</span>');
+                formattedText = formattedText.replace(/\b(Não|NÃO|não)\b/g, '<span class="keyword-no">Não</span>');
+                formattedText = formattedText.replace(/\b(Parcialmente|PARCIALMENTE|parcialmente)\b/g, '<span class="keyword-partial">Parcialmente</span>');
+                
+                // Formatar negrito
+                formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                
+                // Formatar itálico
+                formattedText = formattedText.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+                
+                // Formatar listas não ordenadas
+                formattedText = formattedText.replace(/^\s*\*\s+(.+)$/gm, '<li>$1</li>');
+                formattedText = formattedText.replace(/(<li>.+<\/li>\n)+/g, '<ul>$&</ul>');
+                
+                // Formatar listas ordenadas
+                formattedText = formattedText.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>');
+                formattedText = formattedText.replace(/(<li>.+<\/li>\n)+/g, '<ol>$&</ol>');
+                
+                // Identificar seções principais
+                const mainSections = [
+                    'Análise Geral:',
+                    'Pontos Fortes:',
+                    'Pontos Fracos:',
+                    'Recomendações:',
+                    'Conclusão:',
+                    'Resumo:'
+                ];
+                
+                // Formatar seções principais com destaque especial
+                mainSections.forEach(section => {
+                    const regex = new RegExp(`\\*\\*(${section})\\*\\*`, 'g');
+                    formattedText = formattedText.replace(regex, '</div><div class="analysis-section main-section"><h4 class="main-section-title">$1</h4>');
+                    
+                    // Também procurar sem os asteriscos
+                    const plainRegex = new RegExp(`\\n\\s*(${section})`, 'g');
+                    formattedText = formattedText.replace(plainRegex, '</div><div class="analysis-section main-section"><h4 class="main-section-title">$1</h4>');
+                });
+                
+                // Formatar outras seções
+                formattedText = formattedText.replace(/\n\s*([A-Z][A-Za-zÀ-ÿ\s]+:)(?!<\/h4>)/g, '</div><div class="analysis-section"><h4>$1</h4>');
+                
+                // Adicionar div de seção inicial
+                formattedText = '<div class="analysis-section">' + formattedText;
+                
+                // Fechar a última div de seção
+                formattedText += '</div>';
+                
+                // Remover divs vazias
+                formattedText = formattedText.replace(/<div class="analysis-section"><\/div>/g, '');
+                formattedText = formattedText.replace(/<div class="analysis-section main-section"><\/div>/g, '');
+                
+                return criteriaTagsHtml + formattedText;
+            }
+            
+            function formatChatMessage(text) {
+                // Formatar texto para o chat
+                let formattedText = text;
+                
+                // Formatar tabelas primeiro
+                formattedText = formatTables(formattedText);
+                
+                // Destacar palavras-chave
+                formattedText = formattedText.replace(/\b(Sim|SIM|sim)\b/g, '<span class="keyword-yes">Sim</span>');
+                formattedText = formattedText.replace(/\b(Não|NÃO|não)\b/g, '<span class="keyword-no">Não</span>');
+                formattedText = formattedText.replace(/\b(Parcialmente|PARCIALMENTE|parcialmente)\b/g, '<span class="keyword-partial">Parcialmente</span>');
+                
+                // Formatar negrito
+                formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                
+                // Formatar itálico
+                formattedText = formattedText.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+                
+                // Formatar listas não ordenadas
+                formattedText = formattedText.replace(/^\s*\*\s+(.+)$/gm, '<li>$1</li>');
+                formattedText = formattedText.replace(/(<li>.+<\/li>\n)+/g, '<ul>$&</ul>');
+                
+                // Formatar listas ordenadas
+                formattedText = formattedText.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>');
+                formattedText = formattedText.replace(/(<li>.+<\/li>\n)+/g, '<ol>$&</ol>');
+                
+                return formattedText;
+            }
+            
+            function formatTables(text) {
+                // Check if the text contains a table
+                if (!text.includes('|')) return text;
+                
+                // Split text into lines and find table sections
+                const lines = text.split('\n');
+                const tableStartIndices = [];
+                const tableEndIndices = [];
+                
+                let inTable = false;
+                let tableStart = -1;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    // Check for table start (line with multiple | characters)
+                    if (!inTable && line.includes('|') && line.split('|').length > 2) {
+                        inTable = true;
+                        tableStart = i;
+                    }
+                    // Check for table end (line without | or empty line after being in a table)
+                    else if (inTable && (!line.includes('|') || line === '')) {
+                        inTable = false;
+                        if (tableStart !== -1) {
+                            tableStartIndices.push(tableStart);
+                            tableEndIndices.push(i - 1);
+                            tableStart = -1;
+                        }
+                    }
+                }
+                
+                // Handle case where table goes to the end of text
+                if (inTable && tableStart !== -1) {
+                    tableStartIndices.push(tableStart);
+                    tableEndIndices.push(lines.length - 1);
+                }
+                
+                // Process each table
+                for (let tableIndex = tableStartIndices.length - 1; tableIndex >= 0; tableIndex--) {
+                    const start = tableStartIndices[tableIndex];
+                    const end = tableEndIndices[tableIndex];
+                    
+                    // Extract table lines
+                    const tableLines = lines.slice(start, end + 1);
+                    
+                    // Check if we have enough lines for a valid table (header, separator, at least one row)
+                    if (tableLines.length < 3) continue;
+                    
+                    // Process the table
+                    const headerLine = tableLines[0];
+                    const headerCells = headerLine.split('|').filter(cell => cell.trim() !== '');
+                    
+                    // Skip if not a valid table
+                    if (headerCells.length === 0) continue;
+                    
+                    // Check if this is the "Análise Geral" section which should be handled differently
+                    const isAnaliseGeral = tableLines.some(line => 
+                        line.toLowerCase().includes('análise geral') || 
+                        line.toLowerCase().includes('analise geral'));
+                    
+                    let tableHtml = '<div class="table-container"><table class="table">';
+                    
+                    // Add header
+                    tableHtml += '<thead><tr>';
+                    headerCells.forEach(cell => {
+                        tableHtml += `<th>${cell.trim()}</th>`;
+                    });
+                    tableHtml += '</tr></thead>';
+                    
+                    // Add body
+                    tableHtml += '<tbody>';
+                    
+                    // Skip the separator line (line 1) and process data rows
+                    for (let i = 2; i < tableLines.length; i++) {
+                        const line = tableLines[i];
+                        const cells = line.split('|').filter(cell => cell.trim() !== '');
+                        
+                        if (cells.length === 0) continue;
+                        
+                        tableHtml += '<tr>';
+                        
+                        // Special handling for "Análise Geral" section
+                        if (isAnaliseGeral && cells.length === 1 && 
+                            (cells[0].toLowerCase().includes('análise geral') || 
+                             cells[0].toLowerCase().includes('analise geral'))) {
+                            // Make it span all columns
+                            tableHtml += `<td colspan="${headerCells.length}" class="analysis-general-cell"><strong>${cells[0].trim()}</strong></td>`;
+                        } else {
+                            // Regular row
+                            cells.forEach(cell => {
+                                tableHtml += `<td>${cell.trim()}</td>`;
+                            });
+                            
+                            // If we have fewer cells than headers, add empty cells
+                            for (let j = cells.length; j < headerCells.length; j++) {
+                                tableHtml += '<td></td>';
+                            }
+                        }
+                        
+                        tableHtml += '</tr>';
+                    }
+                    
+                    tableHtml += '</tbody></table></div>';
+                    
+                    // Replace the original table with the HTML version
+                    const tableText = tableLines.join('\n');
+                    text = text.replace(tableText, tableHtml);
+                }
+                
+                return text;
+            }
+            
+            fullscreenToggle.addEventListener('click', function() {
+                if (!isFullscreen) {
+                    document.body.classList.add('fullscreen-mode');
+                    isFullscreen = true;
+                    fullscreenToggle.innerHTML = '<i class="fas fa-compress"></i> <span>Sair da tela cheia</span>';
+                } else {
+                    document.body.classList.remove('fullscreen-mode');
+                    isFullscreen = false;
+                    fullscreenToggle.innerHTML = '<i class="fas fa-expand"></i> <span>Tela cheia</span>';
+                }
+            });
+            
+            backToConfig.addEventListener('click', function() {
+                document.body.classList.remove('fullscreen-mode');
+                isFullscreen = false;
+                fullscreenToggle.innerHTML = '<i class="fas fa-expand"></i> <span>Tela cheia</span>';
+            });
+            
+            // Adicionar classe para estilo de destaque no drag and drop
+            document.head.insertAdjacentHTML('beforeend', `
+                <style>
+                    .file-upload-label-highlight {
+                        border-color: var(--primary);
+                        background-color: rgba(79, 70, 229, 0.1);
+                        transform: scale(1.02);
+                    }
+                </style>
+            `);
+        });
+    </script>
+</body>
+</html>
