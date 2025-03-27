@@ -449,7 +449,7 @@
             font-weight: 500;
         }
         
-        /* Indicador de digitau00e7u00e3o */
+        /* Indicador de digitação */
         .typing-indicator {
             padding: 1rem;
         }
@@ -1100,13 +1100,14 @@
             
             let pdfUploaded = false;
             let isFullscreen = false;
+            let currentPdfId = null;
             
             // Inicialmente esconder o container de chat e resultado
             chatContainer.style.display = 'none';
             result.style.display = 'none';
             
-            // Não verificar automaticamente o status do PDF ao carregar a página
-            // checkPdfStatus();
+            // Verificar se há um PDF salvo ao carregar a página
+            checkPdfStatus();
             
             // Desabilitar o botão de análise até que um arquivo seja selecionado
             analyzeBtn.disabled = true;
@@ -1182,23 +1183,36 @@
             }
             
             function checkPdfStatus() {
-                fetch('/check-pdf-status')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.has_pdf) {
-                            pdfUploaded = true;
-                            noPdfAlert.style.display = 'none';
-                            result.style.display = 'block';
-                            // Não mostrar automaticamente o chat aqui
-                            // chatContainer.style.display = 'block';
-                        } else {
-                            pdfUploaded = false;
-                            chatContainer.style.display = 'none';
-                            result.style.display = 'none';
-                            noPdfAlert.style.display = 'block';
-                        }
-                    })
-                    .catch(error => console.error('Erro ao verificar status do PDF:', error));
+                // Verificar se temos um ID de PDF salvo no localStorage
+                const savedPdfId = localStorage.getItem('currentPdfId');
+                if (savedPdfId) {
+                    currentPdfId = savedPdfId;
+                    
+                    fetch(`/check-pdf-status?pdf_id=${currentPdfId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.has_pdf) {
+                                pdfUploaded = true;
+                                noPdfAlert.style.display = 'none';
+                                result.style.display = 'block';
+                                chatContainer.style.display = 'block';
+                            } else {
+                                pdfUploaded = false;
+                                chatContainer.style.display = 'none';
+                                result.style.display = 'none';
+                                noPdfAlert.style.display = 'block';
+                                // Limpar o ID do PDF salvo
+                                localStorage.removeItem('currentPdfId');
+                                currentPdfId = null;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro ao verificar status do PDF:', error);
+                            // Limpar o ID do PDF salvo em caso de erro
+                            localStorage.removeItem('currentPdfId');
+                            currentPdfId = null;
+                        });
+                }
             }
             
             analyzeBtn.addEventListener('click', function() {
@@ -1207,23 +1221,28 @@
                     return;
                 }
                 
-                // Clear previous PDF data before analyzing new file
-                fetch('/clear-pdf', {
-                    method: 'POST'
-                })
-                .then(response => response.json())
-                .then(() => {
-                    // Obter critérios selecionados
-                    const selectedCriteria = [];
-                    document.querySelectorAll('input[name="criteria"]:checked').forEach(checkbox => {
-                        selectedCriteria.push(checkbox.value);
-                    });
-                    
-                    if (selectedCriteria.length === 0) {
-                        showError('Por favor, selecione pelo menos um critério de análise.');
-                        return;
-                    }
-                    
+                // Obter critérios selecionados
+                const selectedCriteria = [];
+                document.querySelectorAll('input[name="criteria"]:checked').forEach(checkbox => {
+                    selectedCriteria.push(checkbox.value);
+                });
+                
+                if (selectedCriteria.length === 0) {
+                    showError('Por favor, selecione pelo menos um critério de análise.');
+                    return;
+                }
+                
+                // Se tivermos um ID de PDF atual, limpar os dados antes de analisar um novo arquivo
+                const clearPrevious = currentPdfId ? 
+                    fetch('/clear-pdf', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ pdf_id: currentPdfId })
+                    }) : Promise.resolve();
+                
+                clearPrevious.then(() => {
                     // Continue with the analysis after clearing previous data
                     const formData = new FormData();
                     const pdfFile = pdfFileInput.files[0];
@@ -1251,6 +1270,13 @@
                     .then(data => {
                         // Processar e exibir a resposta
                         pdfUploaded = true;
+                        
+                        // Salvar o ID do PDF
+                        if (data.pdf_id) {
+                            currentPdfId = data.pdf_id;
+                            localStorage.setItem('currentPdfId', currentPdfId);
+                        }
+                        
                         loader.style.display = 'none';
                         result.style.display = 'block';
                         // Só mostrar o chat após uma análise bem-sucedida
@@ -1363,7 +1389,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ question: question })
+                    body: JSON.stringify({ question: question, pdf_id: currentPdfId })
                 })
                 .then(response => {
                     if (!response.ok) {

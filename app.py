@@ -2,7 +2,7 @@ import os
 import tempfile
 import traceback
 import json
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import google.generativeai as genai
 import PyPDF2
@@ -16,24 +16,54 @@ import re
 import io
 import logging
 import unicodedata
+import uuid
+import time
 
 app = Flask(__name__)
-app.secret_key = "analisador_artigos_cientificos_2025"  # Chave fixa para sessões mais estáveis
 CORS(app)
 
-# Variável global para armazenar o texto do PDF mais recente
-pdf_text_storage = ""
+# Configurar logging
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('scianalyzer')
+
+# Dicionário para armazenar o texto do PDF mais recente
+pdf_text_storage = {}
+# Dicionário para armazenar timestamps de quando os PDFs foram armazenados
+pdf_timestamp_storage = {}
 
 # Configure Gemini API with the provided key
 API_KEY = "AIzaSyAgr6SVtn1tfrD_ynYO0eZKXaHQP8ONI28"
 genai.configure(api_key=API_KEY)
 
-# Set up the model
+# Usar o modelo Gemini mais recente
 model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Definir limites de tokens mais adequados para artigos grandes
 MAX_TOKENS_LIMIT = 60000  # Aumentado para acomodar artigos maiores
 MAX_CHUNK_SIZE = 30000    # Tamanho máximo de cada chunk para processamento
+PDF_STORAGE_TIMEOUT = 3600  # Tempo em segundos para expirar PDFs armazenados (1 hora)
+
+# Função para limpar PDFs antigos do armazenamento
+def cleanup_old_pdfs():
+    """Remove PDFs antigos do armazenamento para evitar vazamento de memória"""
+    current_time = time.time()
+    expired_ids = []
+    
+    # Identificar PDFs expirados
+    for pdf_id, timestamp in pdf_timestamp_storage.items():
+        if current_time - timestamp > PDF_STORAGE_TIMEOUT:
+            expired_ids.append(pdf_id)
+    
+    # Remover PDFs expirados
+    for pdf_id in expired_ids:
+        if pdf_id in pdf_text_storage:
+            del pdf_text_storage[pdf_id]
+        if pdf_id in pdf_timestamp_storage:
+            del pdf_timestamp_storage[pdf_id]
+    
+    if expired_ids:
+        logger.info(f"Limpeza de armazenamento: {len(expired_ids)} PDFs antigos removidos")
 
 def sanitize_text(text):
     """Limpa o texto removendo caracteres problemáticos e normalizando"""
@@ -229,11 +259,13 @@ def health_check():
 
 @app.route('/analyze', methods=['POST'])
 def analyze_pdf():
-    global pdf_text_storage
+    # Executar limpeza de PDFs antigos
+    cleanup_old_pdfs()
     
-    # Clear previous PDF text storage
-    pdf_text_storage = ""
-    session.pop('pdf_text', None)
+    # Gerar um novo ID para o PDF
+    pdf_id = str(uuid.uuid4())
+    pdf_text_storage[pdf_id] = ""
+    pdf_timestamp_storage[pdf_id] = time.time()
     
     # Check if a file was uploaded
     if 'file' not in request.files:
@@ -261,9 +293,9 @@ def analyze_pdf():
         # Extract text from the PDF
         pdf_text = extract_text_from_pdf(temp_filename)
         
-        # Store the PDF text in both session and global variable
-        session['pdf_text'] = pdf_text
-        pdf_text_storage = pdf_text  # Armazenar em variável global também
+        # Store the PDF text in the storage dictionary
+        pdf_text_storage[pdf_id] = pdf_text
+        pdf_timestamp_storage[pdf_id] = time.time()  # Atualizar timestamp
         
         # Clean up the temporary file
         os.unlink(temp_filename)
@@ -271,8 +303,7 @@ def analyze_pdf():
         # Check if any text was extracted
         if not pdf_text or pdf_text.strip() == "":
             # Limpar dados em caso de erro
-            pdf_text_storage = ""
-            session.pop('pdf_text', None)
+            pdf_text_storage[pdf_id] = ""
             return jsonify({"error": "No text could be extracted from the PDF. The file might be scanned or contain only images."}), 400
         
         # Verificar o tamanho do texto e processar conforme necessário
@@ -297,7 +328,8 @@ def analyze_pdf():
                 "answer": response.text,
                 "pdf_length": original_length,
                 "has_pdf": True,
-                "was_truncated": was_truncated
+                "was_truncated": was_truncated,
+                "pdf_id": pdf_id
             })
         except Exception as api_error:
             # Tentar novamente com um texto ainda menor se houver erro de API
@@ -317,15 +349,15 @@ def analyze_pdf():
                     "pdf_length": original_length,
                     "has_pdf": True,
                     "was_truncated": True,
-                    "severely_truncated": True
+                    "severely_truncated": True,
+                    "pdf_id": pdf_id
                 })
             except Exception as final_error:
                 raise Exception(f"Falha ao processar o artigo mesmo após redução: {str(final_error)}")
         
     except Exception as e:
         # Limpar dados em caso de erro
-        pdf_text_storage = ""
-        session.pop('pdf_text', None)
+        pdf_text_storage[pdf_id] = ""
         
         app.logger.error(f"Error processing PDF: {str(e)}")
         app.logger.error(traceback.format_exc())
@@ -333,7 +365,8 @@ def analyze_pdf():
 
 @app.route('/chat', methods=['POST'])
 def chat_with_article():
-    global pdf_text_storage
+    # Executar limpeza de PDFs antigos
+    cleanup_old_pdfs()
     
     data = request.json
     
@@ -341,21 +374,29 @@ def chat_with_article():
         return jsonify({"error": "Missing question"}), 400
     
     question = data['question']
+    app.logger.info(f"Recebida pergunta para chat: {question[:50]}...")
     
-    # Tentar obter o texto do PDF da sessão primeiro
-    pdf_text = session.get('pdf_text', None)
+    # Obter o ID do PDF da requisição
+    pdf_id = data.get('pdf_id', None)
+    if not pdf_id:
+        return jsonify({"error": "Missing PDF ID"}), 400
     
-    # Se não estiver na sessão, usar a variável global
-    if not pdf_text or pdf_text.strip() == "":
-        pdf_text = pdf_text_storage
+    # Obter o texto do PDF do armazenamento
+    pdf_text = pdf_text_storage.get(pdf_id, None)
     
     # Verificar se temos algum texto de PDF para analisar
     if not pdf_text or pdf_text.strip() == "":
+        app.logger.warning("Tentativa de chat sem PDF carregado")
         return jsonify({"error": "No article context found. Please upload a PDF first."}), 400
+    
+    # Atualizar timestamp para evitar que o PDF expire durante o chat
+    pdf_timestamp_storage[pdf_id] = time.time()
     
     try:
         # Processar o texto se for muito grande
+        original_length = len(pdf_text)
         if len(pdf_text) > MAX_CHUNK_SIZE:
+            app.logger.info(f"Reduzindo texto para chat: {len(pdf_text)} caracteres")
             pdf_text = process_large_text(pdf_text)
         
         # Create the prompt for article chat
@@ -363,7 +404,11 @@ def chat_with_article():
         
         try:
             # Generate response from Gemini
+            app.logger.info("Enviando pergunta para Gemini API")
+            start_time = time.time()
             response = model.generate_content(prompt)
+            elapsed = time.time() - start_time
+            app.logger.info(f"Resposta recebida em {elapsed:.2f} segundos")
             
             return jsonify({
                 "success": True,
@@ -378,37 +423,54 @@ def chat_with_article():
             reduced_text = process_large_text(pdf_text, MAX_CHUNK_SIZE // 2)
             prompt = f"""You are an expert scientific article analyst. Based on the following scientific article, please answer this question: {question}\n\nARTICLE CONTENT:\n{reduced_text} always respond in ptbr """
             
-            response = model.generate_content(prompt)
-            
-            return jsonify({
-                "success": True,
-                "question": question,
-                "answer": response.text,
-                "severely_truncated": True
-            })
+            try:
+                app.logger.info("Tentando novamente com texto ainda mais reduzido")
+                start_time = time.time()
+                response = model.generate_content(prompt)
+                elapsed = time.time() - start_time
+                app.logger.info(f"Resposta com texto reduzido recebida em {elapsed:.2f} segundos")
+                
+                return jsonify({
+                    "success": True,
+                    "question": question,
+                    "answer": response.text,
+                    "severely_truncated": True
+                })
+            except Exception as final_error:
+                app.logger.error(f"Falha final na API Gemini durante chat: {str(final_error)}")
+                raise Exception(f"Falha ao processar a pergunta mesmo após redução de texto: {str(final_error)}")
         
     except Exception as e:
-        app.logger.error(f"Error in chat endpoint: {str(e)}")
+        app.logger.error(f"Erro no endpoint de chat: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({"error": f"Error processing question: {str(e)}"}), 500
 
 @app.route('/check-pdf-status', methods=['GET'])
 def check_pdf_status():
-    global pdf_text_storage
+    # Executar limpeza de PDFs antigos
+    cleanup_old_pdfs()
     
-    # Verificar se temos um PDF carregado na sessão ou na variável global
-    pdf_text = session.get('pdf_text', None)
+    # Obter o ID do PDF da requisição
+    pdf_id = request.args.get('pdf_id', None)
+    if not pdf_id:
+        return jsonify({"error": "Missing PDF ID"}), 400
     
-    if not pdf_text or pdf_text.strip() == "":
-        pdf_text = pdf_text_storage
+    # Verificar se temos um PDF carregado no armazenamento
+    pdf_text = pdf_text_storage.get(pdf_id, None)
     
     has_pdf = bool(pdf_text and pdf_text.strip() != "")
     
     # Garantir que has_pdf é False se não houver texto de PDF válido
-    if not has_pdf:
+    if not has_pdf and pdf_id in pdf_text_storage:
         # Limpar qualquer dado residual
-        pdf_text_storage = ""
-        session.pop('pdf_text', None)
+        pdf_text_storage[pdf_id] = ""
+        if pdf_id in pdf_timestamp_storage:
+            del pdf_timestamp_storage[pdf_id]
+        app.logger.info("Status do PDF: Nenhum PDF carregado")
+    elif has_pdf:
+        # Atualizar timestamp para evitar que o PDF expire durante a verificação
+        pdf_timestamp_storage[pdf_id] = time.time()
+        app.logger.info(f"Status do PDF: PDF carregado com {len(pdf_text)} caracteres")
     
     return jsonify({
         "has_pdf": has_pdf
@@ -416,14 +478,18 @@ def check_pdf_status():
 
 @app.route('/clear-pdf', methods=['POST'])
 def clear_pdf():
-    global pdf_text_storage
+    # Obter o ID do PDF da requisição
+    data = request.json
+    pdf_id = data.get('pdf_id', None)
+    if not pdf_id:
+        return jsonify({"error": "Missing PDF ID"}), 400
     
-    # Clear PDF text from both session and global variable
-    pdf_text_storage = ""
-    session.pop('pdf_text', None)
-    
-    # Garantir que a sessão seja salva
-    session.modified = True
+    # Limpar o texto do PDF do armazenamento
+    if pdf_id in pdf_text_storage:
+        pdf_text_storage[pdf_id] = ""
+        if pdf_id in pdf_timestamp_storage:
+            del pdf_timestamp_storage[pdf_id]
+        app.logger.info("Dados do PDF limpos com sucesso")
     
     return jsonify({
         "success": True,
@@ -474,6 +540,15 @@ def create_scientific_analysis_prompt(pdf_text, criteria):
     ARTIGO CIENTÍFICO:\n{pdf_text}"""
     
     return prompt
+
+# Executar limpeza periódica
+def periodic_cleanup():
+    while True:
+        cleanup_old_pdfs()
+        time.sleep(PDF_STORAGE_TIMEOUT)
+
+import threading
+threading.Thread(target=periodic_cleanup).start()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
