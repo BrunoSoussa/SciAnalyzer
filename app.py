@@ -116,8 +116,8 @@ genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Definir limites de tokens mais adequados para artigos grandes
-MAX_TOKENS_LIMIT = 60000  # Aumentado para acomodar artigos maiores
-MAX_CHUNK_SIZE = 30000    # Tamanho máximo de cada chunk para processamento
+MAX_TOKENS_LIMIT = 600000  # Aumentado para acomodar artigos maiores
+MAX_CHUNK_SIZE = 300000    # Tamanho máximo de cada chunk para processamento
 PDF_STORAGE_TIMEOUT = 3600  # Tempo em segundos para expirar PDFs armazenados (1 hora)
 
 # Função para limpar caracteres problemáticos do texto
@@ -730,6 +730,85 @@ def upload_pdf():
     except Exception as e:
         app.logger.error(f"Erro no upload de PDF: {str(e)}")
         return jsonify({"error": f"Error uploading PDF: {str(e)}"}), 500
+
+@app.route('/analyze-existing', methods=['POST'])
+def analyze_existing_pdf():
+    # Executar limpeza de PDFs antigos
+    cleanup_old_pdfs()
+    
+    try:
+        data = request.json
+        
+        # Verificar se temos os dados necessarios
+        if not data or 'pdf_id' not in data or 'criteria' not in data:
+            app.logger.warning("Tentativa de analise com dados incompletos")
+            return jsonify({"error": "Missing required data (pdf_id or criteria)"}), 400
+        
+        pdf_id = data['pdf_id']
+        selected_criteria = data['criteria']
+        
+        # Verificar se o PDF existe no armazenamento
+        if not is_pdf_in_storage(pdf_id):
+            app.logger.warning(f"ID do PDF {pdf_id} não encontrado para análise")
+            return jsonify({"error": "PDF not found. Please upload a PDF first."}), 400
+        
+        # Recuperar o texto do PDF
+        pdf_text = get_pdf_text(pdf_id)
+        
+        if not pdf_text or pdf_text.strip() == "":
+            app.logger.warning(f"PDF {pdf_id} encontrado mas sem texto")
+            return jsonify({"error": "No text found in the uploaded PDF."}), 400
+        
+        # Atualizar o timestamp para evitar que o PDF expire durante a análise
+        pdf_timestamp_storage[pdf_id] = time.time()
+        
+        # Processar o texto se for muito grande
+        original_length = len(pdf_text)
+        was_truncated = False
+        severely_truncated = False
+        
+        if len(pdf_text) > MAX_CHUNK_SIZE:
+            app.logger.info(f"Reduzindo texto de {len(pdf_text)} caracteres para análise")
+            pdf_text = process_large_text(pdf_text)
+            was_truncated = True
+            
+            # Verificar se ainda precisa de mais redução
+            if len(pdf_text) > MAX_CHUNK_SIZE:
+                app.logger.warning(f"Reduzindo ainda mais o texto para {MAX_CHUNK_SIZE // 2} caracteres")
+                pdf_text = process_large_text(pdf_text, MAX_CHUNK_SIZE // 2)
+                severely_truncated = True
+        
+        # Criar o prompt para análise com base nos critérios selecionados
+        prompt = create_scientific_analysis_prompt(pdf_text, selected_criteria)
+        
+        try:
+            # Gerar respostas do Gemini
+            app.logger.info("Enviando prompt de análise para Gemini API")
+            start_time = time.time()
+            response = model.generate_content(prompt)
+            elapsed = time.time() - start_time
+            app.logger.info(f"Resposta recebida em {elapsed:.2f} segundos")
+            
+            # Armazenar o resumo na sessão para acesso futuro
+            session['summary'] = response.text
+            
+            return jsonify({
+                "success": True,
+                "pdf_id": pdf_id,
+                "answer": response.text,
+                "was_truncated": was_truncated,
+                "severely_truncated": severely_truncated,
+                "pdf_length": original_length
+            })
+            
+        except Exception as api_error:
+            app.logger.error(f"Erro na API Gemini: {str(api_error)}")
+            return jsonify({"error": f"Error in AI processing: {str(api_error)}"}), 500
+            
+    except Exception as e:
+        app.logger.error(f"Erro ao analisar PDF existente: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": f"Error analyzing PDF: {str(e)}"}), 500
 
 def create_scientific_analysis_prompt(pdf_text, criteria):
     """Create a prompt for scientific article analysis based on selected criteria"""

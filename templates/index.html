@@ -78,6 +78,23 @@
             position: relative;
         }
         
+        .logo-container {
+            display: inline-block;
+            text-align: center;
+            margin-right: 1rem;
+            vertical-align: middle;
+        }
+        
+        .logo-img {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 0.5rem;
+        }
+        
+        .title-container {
+            display: inline-block;
+        }
+        
         .app-title {
             font-family: 'Poppins', sans-serif;
             font-size: 2.5rem;
@@ -965,13 +982,80 @@
             color: var(--primary-dark);
             border-bottom: 2px solid #dee2e6;
         }
+        
+        .logo-container {
+            text-align: center;
+        }
+        
+        .logo-img {
+            max-width: 200px;
+            height: auto;
+        }
+        
+        .app-footer {
+            text-align: center;
+            padding: 1rem;
+            background-color: var(--gray-100);
+            border-top: 1px solid var(--gray-200);
+        }
+        
+        .footer-text {
+            margin: 0;
+            color: var(--gray-600);
+        }
+        
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading-spinner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            color: white;
+        }
+
+        .loading-spinner .spinner-circle {
+            width: 70px;
+            height: 70px;
+            border: 6px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spinner-rotate 1s ease-in-out infinite;
+        }
+
+        @keyframes spinner-rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 1.25rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="app-header">
-            <h1 class="app-title">SciAnalyzer</h1>
-            <p class="app-description">Análise avançada de artigos científicos com inteligência artificial</p>
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='images/jm2-logo.png') }}" alt="JM2 Logo" class="logo-img">
+            </div>
+            <div class="title-container">
+                <h1 class="app-title">SciAnalyzer</h1>
+                <p class="app-description">Análise avançada de artigos científicos com inteligência artificial</p>
+            </div>
         </div>
         
         <div class="app-layout">
@@ -1079,6 +1163,19 @@
             </div>
         </div>
     </div>
+
+    <div class="loading-overlay">
+        <div class="loading-spinner">
+            <div class="spinner-circle"></div>
+            <div class="loading-text">Carregando...</div>
+        </div>
+    </div>
+
+    <footer class="app-footer">
+        <div class="container">
+            <p class="footer-text">Powered 2025 - JM2 - Systems and Technologies - (86) 99986-8712</p>
+        </div>
+    </footer>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1238,7 +1335,12 @@
             }
             
             analyzeBtn.addEventListener('click', function() {
-                if (pdfFileInput.files.length === 0) {
+                showLoading();
+                // Verificar se temos um PDF carregado ou se precisa fazer upload
+                const needsUpload = pdfFileInput.files.length > 0;
+                const hasPdfUploaded = pdfUploaded && currentPdfId;
+                
+                if (!hasPdfUploaded && !needsUpload) {
                     showError('Por favor, selecione um arquivo PDF.');
                     return;
                 }
@@ -1254,124 +1356,193 @@
                     return;
                 }
                 
-                // Se tivermos um ID de PDF atual, limpar os dados antes de analisar um novo arquivo
-                const clearPrevious = currentPdfId ? 
-                    fetch('/clear-pdf', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ pdf_id: currentPdfId })
-                    }) : Promise.resolve();
+                // Mostrar loader e mensagem de status
+                loader.style.display = 'block';
+                statusMessage.textContent = 'Analisando o artigo... Isso pode levar alguns minutos.';
+                statusMessage.style.display = 'block';
+                statusMessage.style.color = 'var(--gray-600)';
+                result.style.display = 'none';
                 
-                clearPrevious.then(() => {
-                    // Continue with the analysis after clearing previous data
-                    const formData = new FormData();
-                    const pdfFile = pdfFileInput.files[0];
-                    formData.append('file', pdfFile);
-                    formData.append('criteria', JSON.stringify(selectedCriteria));
+                // Se temos um novo arquivo para upload
+                if (needsUpload) {
+                    // Se tivermos um ID de PDF atual, limpar os dados antes de analisar um novo arquivo
+                    const clearPrevious = currentPdfId ? 
+                        fetch('/clear-pdf', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ pdf_id: currentPdfId })
+                        }) : Promise.resolve();
                     
-                    // Mostrar loader e mensagem de status
-                    loader.style.display = 'block';
-                    statusMessage.textContent = 'Analisando o artigo... Isso pode levar alguns minutos.';
-                    statusMessage.style.display = 'block';
-                    statusMessage.style.color = 'var(--gray-600)';
-                    result.style.display = 'none';
-                    chatContainer.style.display = 'none';
-                    
-                    fetch('/analyze', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Erro ao analisar o PDF');
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        // Processar e exibir a resposta
-                        pdfUploaded = true;
-                        
-                        // Salvar o ID do PDF
-                        if (data.pdf_id) {
-                            currentPdfId = data.pdf_id;
-                            localStorage.setItem('currentPdfId', currentPdfId);
-                        }
-                        
-                        loader.style.display = 'none';
-                        result.style.display = 'block';
-                        // Só mostrar o chat após uma análise bem-sucedida
-                        chatContainer.style.display = 'block';
-                        noPdfAlert.style.display = 'none';
-                        statusMessage.style.display = 'none';
-                        
-                        // Adicionar aviso se o artigo foi truncado para processamento
-                        let truncationWarning = '';
-                        if (data.was_truncated) {
-                            if (data.severely_truncated) {
-                                truncationWarning = `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> O artigo era muito grande (${data.pdf_length} caracteres) e precisou ser significativamente reduzido para processamento. A análise pode não cobrir todo o conteúdo.</div>`;
-                            } else {
-                                truncationWarning = `<div class="alert alert-info"><i class="fas fa-info-circle"></i> O artigo era grande (${data.pdf_length} caracteres) e algumas partes intermediárias foram omitidas para processamento. A análise foca nas partes principais.</div>`;
-                            }
-                        }
-                        
-                        // Formatar a resposta para melhor visualização
-                        let formattedAnswer = formatAnalysisOutput(data.answer, selectedCriteria);
-                        answer.innerHTML = truncationWarning + formattedAnswer;
-                        
-                        // Adicionar classe de animação para fade-in
-                        result.classList.add('fade-in');
-                        chatContainer.classList.add('fade-in');
-                        
-                        // Ativar modo tela cheia automaticamente quando a análise for concluída
-                        document.body.classList.add('fullscreen-mode');
-                        isFullscreen = true;
-                        fullscreenToggle.innerHTML = '<i class="fas fa-compress"></i> <span>Sair da tela cheia</span>';
-                        
-                        // Rolar para o topo dos resultados
-                        result.scrollIntoView({ behavior: 'smooth' });
-                        
-                        // Permitir selecionar um novo arquivo após análise concluída
-                        pdfFileInput.value = '';
+                    clearPrevious.then(() => {
+                        // Continue with the upload and analysis after clearing previous data
+                        uploadAndAnalyze(selectedCriteria);
                     })
                     .catch(error => {
-                        loader.style.display = 'none';
-                        statusMessage.textContent = 'Erro: ' + error.message;
-                        statusMessage.style.color = 'var(--danger)';
+                        console.error('Erro ao limpar dados do PDF anterior:', error);
                         pdfFileInput.value = '';
-                        
-                        // Mostrar mensagem de erro mais detalhada
-                        result.style.display = 'block';
-                        answer.innerHTML = `
-                            <div class="alert alert-error">
-                                <i class="fas fa-exclamation-circle"></i>
-                                <div>
-                                    <h3>Erro ao processar o PDF</h3>
-                                    <p>${error.message}</p>
-                                    <p>Possíveis causas:</p>
-                                    <ul>
-                                        <li>O arquivo PDF pode estar corrompido</li>
-                                        <li>O PDF pode estar protegido ou criptografado</li>
-                                        <li>O PDF pode conter apenas imagens sem texto extraível</li>
-                                        <li>O formato do arquivo pode não ser compatível</li>
-                                    </ul>
-                                    <p>Sugestões:</p>
-                                    <ul>
-                                        <li>Tente com outro arquivo PDF</li>
-                                        <li>Verifique se o PDF contém texto selecionável</li>
-                                        <li>Se o PDF for um scan, considere usar um software OCR antes</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        `;
                     });
+                } else {
+                    // Reuso o PDF já carregado, apenas analisar novamente com os novos critérios
+                    analyzeExistingPdf(selectedCriteria);
+                }
+            });
+            
+            // Função para fazer upload de novo PDF e analisar
+            function uploadAndAnalyze(selectedCriteria) {
+                const formData = new FormData();
+                const pdfFile = pdfFileInput.files[0];
+                formData.append('pdfFile', pdfFile);
+                formData.append('criteria', JSON.stringify(selectedCriteria));
+                
+                // Fazer upload do arquivo
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erro ao fazer upload do PDF');
+                    }
+                    return response.json();
+                })
+                .then(uploadData => {
+                    // Salvar o ID do PDF
+                    currentPdfId = uploadData.pdf_id;
+                    pdfUploaded = true;
+                    
+                    // Atualizar a interface para mostrar o nome do arquivo
+                    if (uploadData.filename) {
+                        const filenameDisplay = document.getElementById('filename-display');
+                        if (filenameDisplay) {
+                            filenameDisplay.textContent = 'Arquivo carregado: ' + uploadData.filename;
+                            filenameDisplay.style.display = 'block';
+                        }
+                    }
+                    
+                    // Agora analisar o PDF com os critérios selecionados
+                    return analyzeExistingPdf(selectedCriteria);
                 })
                 .catch(error => {
-                    console.error('Erro ao limpar dados do PDF anterior:', error);
-                    pdfFileInput.value = '';
+                    handleAnalysisError(error);
                 });
-            });
+            }
+            
+            // Função para analisar um PDF existente com novos critérios
+            function analyzeExistingPdf(selectedCriteria) {
+                return fetch('/analyze-existing', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        pdf_id: currentPdfId,
+                        criteria: selectedCriteria
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erro ao analisar o PDF');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Processar e exibir a resposta
+                    handleAnalysisSuccess(data, selectedCriteria);
+                })
+                .catch(error => {
+                    handleAnalysisError(error);
+                });
+            }
+            
+            // Função para lidar com o sucesso da análise
+            function handleAnalysisSuccess(data, selectedCriteria) {
+                hideLoading();
+                // Salvar o ID do PDF se fornecido
+                if (data.pdf_id) {
+                    currentPdfId = data.pdf_id;
+                }
+                
+                loader.style.display = 'none';
+                result.style.display = 'block';
+                // Só mostrar o chat após uma análise bem-sucedida
+                chatContainer.style.display = 'block';
+                noPdfAlert.style.display = 'none';
+                statusMessage.style.display = 'none';
+                
+                // Adicionar aviso se o artigo foi truncado para processamento
+                let truncationWarning = '';
+                if (data.was_truncated) {
+                    if (data.severely_truncated) {
+                        truncationWarning = `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> O artigo era muito grande (${data.pdf_length} caracteres) e precisou ser significativamente reduzido para processamento. A análise pode não cobrir todo o conteúdo.</div>`;
+                    } else {
+                        truncationWarning = `<div class="alert alert-info"><i class="fas fa-info-circle"></i> O artigo era grande (${data.pdf_length} caracteres) e algumas partes intermediárias foram omitidas para processamento. A análise foca nas partes principais.</div>`;
+                    }
+                }
+                
+                // Formatar a resposta para melhor visualização
+                let formattedAnswer = formatAnalysisOutput(data.answer, selectedCriteria);
+                answer.innerHTML = truncationWarning + formattedAnswer;
+                
+                // Adicionar classe de animação para fade-in
+                result.classList.add('fade-in');
+                chatContainer.classList.add('fade-in');
+                
+                // Ativar modo tela cheia automaticamente quando a análise for concluída
+                document.body.classList.add('fullscreen-mode');
+                isFullscreen = true;
+                fullscreenToggle.innerHTML = '<i class="fas fa-compress"></i> <span>Sair da tela cheia</span>';
+                
+                // Rolar para o topo dos resultados
+                result.scrollIntoView({ behavior: 'smooth' });
+                
+                // Permitir selecionar um novo arquivo após análise concluída
+                if (pdfFileInput.files.length > 0) {
+                    pdfFileInput.value = '';
+                }
+            }
+            
+            // Função para lidar com erros na análise
+            function handleAnalysisError(error) {
+                hideLoading();
+                loader.style.display = 'none';
+                statusMessage.textContent = 'Erro: ' + error.message;
+                statusMessage.style.color = 'var(--danger)';
+                
+                // Mostrar mensagem de erro mais detalhada
+                result.style.display = 'block';
+                answer.innerHTML = `
+                    <div class="alert alert-error">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <div>
+                            <h3>Erro ao processar o PDF</h3>
+                            <p>${error.message}</p>
+                            <p>Possíveis causas:</p>
+                            <ul>
+                                <li>O arquivo PDF pode estar corrompido</li>
+                                <li>O PDF pode estar protegido ou criptografado</li>
+                                <li>O PDF pode conter apenas imagens sem texto extraível</li>
+                                <li>O formato do arquivo pode não ser compatível</li>
+                            </ul>
+                            <p>Sugestões:</p>
+                            <ul>
+                                <li>Tente com outro arquivo PDF</li>
+                                <li>Verifique se o PDF contém texto selecionável</li>
+                                <li>Se o PDF for um scan, considere usar um software OCR antes</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            function showLoading() {
+                document.querySelector('.loading-overlay').style.display = 'flex';
+            }
+
+            function hideLoading() {
+                document.querySelector('.loading-overlay').style.display = 'none';
+            }
             
             sendBtn.addEventListener('click', sendChatMessage);
             
