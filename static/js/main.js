@@ -264,33 +264,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Converter markdown para HTML se for mensagem do sistema
         if (sender === 'system') {
-            // Substituir links por elementos <a>
-            content = content.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-            
-            // Substituir **texto** por <strong>texto</strong>
-            content = content.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
-            
-            // Substituir *texto* por <em>texto</em>
-            content = content.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
-            
-            // Substituir `texto` por <code>texto</code>
-            content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
-            
-            // Substituir blocos de cu00f3digo
-            content = content.replace(/```([\s\S]+?)```/g, '<pre><code>$1</code></pre>');
-            
-            // Substituir quebras de linha por <br>
-            content = content.replace(/\n/g, '<br>');
-            
-            // Formatar tu00edtulos
-            content = content.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-            content = content.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-            content = content.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-            
-            // Formatar listas
-            content = content.replace(/^\* (.+)$/gm, '<li>$1</li>');
-            content = content.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-            content = content.replace(/(<li>.+<\/li>\s*)+/g, '<ul>$&</ul>');
+            content = formatMarkdown(content);
         }
         
         messageDiv.innerHTML = `
@@ -299,6 +273,96 @@ document.addEventListener('DOMContentLoaded', function() {
         
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Formatar markdown para HTML
+    function formatMarkdown(text) {
+        // Preservar blocos de cu00f3digo antes de outras transformau00e7u00f5es
+        const codeBlocks = [];
+        text = text.replace(/```([\s\S]+?)```/g, function(match) {
+            codeBlocks.push(match);
+            return "%%CODEBLOCK_" + (codeBlocks.length - 1) + "%%";
+        });
+        
+        // Preservar cu00f3digo inline
+        const inlineCode = [];
+        text = text.replace(/`([^`]+)`/g, function(match) {
+            inlineCode.push(match);
+            return "%%INLINECODE_" + (inlineCode.length - 1) + "%%";
+        });
+        
+        // Substituir links por elementos <a>
+        text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+        
+        // Formatar tu00edtulos
+        text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        
+        // Substituir **texto** por <strong>texto</strong>
+        text = text.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
+        
+        // Substituir *texto* por <em>texto</em>
+        text = text.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
+        
+        // Formatar listas nu00e3o ordenadas
+        text = text.replace(/^\* (.+)$/gm, '<li>$1</li>');
+        text = text.replace(/^- (.+)$/gm, '<li>$1</li>');
+        
+        // Formatar listas ordenadas
+        text = text.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+        
+        // Agrupar itens de lista
+        text = text.replace(/(<li>.+<\/li>\s*)+/g, '<ul>$&</ul>');
+        
+        // Formatar tabelas (formato markdown simplificado)
+        let tableMatch = text.match(/\|(.+)\|\s*\n\|\s*[-:\|\s]+\|\s*\n((\|.+\|\s*\n)+)/g);
+        if (tableMatch) {
+            tableMatch.forEach(table => {
+                let rows = table.split('\n').filter(row => row.trim() !== '');
+                let headers = rows[0].split('|').filter(cell => cell.trim() !== '').map(cell => cell.trim());
+                let htmlTable = '<table><thead><tr>';
+                
+                // Headers
+                headers.forEach(header => {
+                    htmlTable += `<th>${header}</th>`;
+                });
+                htmlTable += '</tr></thead><tbody>';
+                
+                // Rows (skip header and separator rows)
+                for (let i = 2; i < rows.length; i++) {
+                    let cells = rows[i].split('|').filter(cell => cell.trim() !== '').map(cell => cell.trim());
+                    htmlTable += '<tr>';
+                    cells.forEach(cell => {
+                        htmlTable += `<td>${cell}</td>`;
+                    });
+                    htmlTable += '</tr>';
+                }
+                
+                htmlTable += '</tbody></table>';
+                text = text.replace(table, htmlTable);
+            });
+        }
+        
+        // Formatar citau00e7u00f5es
+        text = text.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+        
+        // Substituir quebras de linha por <br>
+        text = text.replace(/\n/g, '<br>');
+        
+        // Restaurar blocos de cu00f3digo
+        for (let i = 0; i < codeBlocks.length; i++) {
+            let code = codeBlocks[i].replace(/```([\s\S]+?)```/g, '$1').trim();
+            text = text.replace("%%CODEBLOCK_" + i + "%%", `<pre><code>${code}</code></pre>`);
+        }
+        
+        // Restaurar cu00f3digo inline
+        for (let i = 0; i < inlineCode.length; i++) {
+            let code = inlineCode[i].replace(/`([^`]+)`/g, '$1');
+            text = text.replace("%%INLINECODE_" + i + "%%", `<code>${code}</code>`);
+        }
+        
+        return text;
     }
     
     // Adicionar indicador de digitau00e7u00e3o

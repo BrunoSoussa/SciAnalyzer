@@ -374,9 +374,19 @@ A relevância e contribuição para o campo.
     
     prompt += """
 
-Formate sua resposta em markdown para melhor legibilidade. 
-Utilize títulos, sub­títulos, listas e negrito para destacar informações importantes.
-Se encontrar tabelas no texto, formate-as de maneira organizada.
+Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo estas diretrizes:
+
+1. Use títulos (# e ##) para organizar as seções principais
+2. Use subtítulos (### e ####) para temas dentro de cada seção
+3. Utilize **negrito** para destacar conceitos-chave e termos importantes
+4. Utilize *itálico* para ênfase moderada ou termos específicos
+5. Crie listas com marcadores para enumerar pontos relacionados
+6. Use listas numeradas para sequências ou passos
+7. Quando citar dados numéricos, organize-os em tabelas bem formatadas
+8. Utilize blocos de citação (>) para destacar trechos importantes do artigo
+9. Separe seções com linhas horizontais (---) quando apropriado
+10. Inclua um resumo conciso no início e uma conclusão ao final
+
 Seja detalhado, mas conciso. Baseie sua análise apenas no conteúdo do PDF fornecido.
 """
     
@@ -393,9 +403,17 @@ def create_question_prompt(pdf_text, question, criteria):
     
     prompt += """
 
-Formate sua resposta em markdown para melhor legibilidade.
-Utilize títulos, listas e negrito para destacar informações importantes.
-Se encontrar tabelas no texto, formate-as de maneira organizada.
+Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo estas diretrizes:
+
+1. Use títulos (# e ##) para organizar as seções principais
+2. Use subtítulos (### e ####) para temas dentro de cada seção
+3. Utilize **negrito** para destacar conceitos-chave e termos importantes
+4. Utilize *itálico* para ênfase moderada ou termos específicos
+5. Crie listas com marcadores para enumerar pontos relacionados
+6. Use listas numeradas para sequências ou passos
+7. Quando citar dados numéricos, organize-os em tabelas bem formatadas
+8. Utilize blocos de citação (>) para destacar trechos importantes do artigo
+
 Seja detalhado, mas conciso. Baseie sua resposta apenas no conteúdo do PDF fornecido.
 """
     
