@@ -314,7 +314,7 @@ def chat():
         selected_criteria = data.get('criteria', {})
         is_analysis = data.get('is_analysis', False)
         
-        logger.info(f"Recebida solicitação de chat: message={message}, pdf_id={pdf_id}, is_analysis={is_analysis}")
+        logger.info(f"Recebida solicitação de chat: message='{message}', pdf_id='{pdf_id}', is_analysis={is_analysis}")
         logger.info(f"Critérios selecionados: {selected_criteria}")
         
         # Verificar se o PDF existe
@@ -328,8 +328,11 @@ def chat():
         
         logger.info(f"Processando PDF: {pdf_filename} (id: {pdf_id})")
         
-        # Construir o prompt com base no tipo de solicitação (análise ou pergunta)
-        if is_analysis or message == "ANALISE_COMPLETA":
+        # Verificar se é uma solicitação de análise
+        do_analysis = is_analysis or message == "ANALISE_COMPLETA" or "analise" in message.lower() or "análise" in message.lower()
+        
+        # Construir o prompt com base no tipo de solicitação
+        if do_analysis:
             logger.info("Gerando análise completa")
             prompt = create_analysis_prompt_full(pdf_text, pdf_filename, selected_criteria)
         else:
@@ -345,6 +348,8 @@ def chat():
     
     except Exception as e:
         logger.error(f"Erro no chat: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": f"Erro ao processar mensagem: {str(e)}"})
 
 # Função para criar o prompt de análise completa

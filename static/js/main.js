@@ -454,6 +454,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Gerar análise completa
     function generateAnalysis() {
+        console.log('Função generateAnalysis iniciada');
+        
         if (!currentPdfId) {
             addMessage('system', 'Por favor, faça upload de um PDF antes de gerar uma análise.', true);
             return;
@@ -481,20 +483,27 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Enviando solicitação de análise com os seguintes critérios:', criteriaToSend);
         console.log('PDF ID:', currentPdfId);
         
+        // Criar o objeto de dados para enviar
+        const requestData = {
+            message: 'ANALISE_COMPLETA',
+            pdf_id: currentPdfId,
+            criteria: criteriaToSend,
+            is_analysis: true
+        };
+        
+        console.log('Dados da requisição:', JSON.stringify(requestData));
+        
         // Enviar solicitação de análise para o servidor
         fetch('/chat', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
-            body: JSON.stringify({
-                message: 'ANALISE_COMPLETA',
-                pdf_id: currentPdfId,
-                criteria: criteriaToSend,
-                is_analysis: true
-            })
+            body: JSON.stringify(requestData)
         })
         .then(response => {
+            console.log('Resposta recebida do servidor:', response.status);
             if (!response.ok) {
                 throw new Error(`Erro HTTP: ${response.status}`);
             }
@@ -503,6 +512,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             // Remover indicador de digitação
             removeTypingIndicator();
+            console.log('Dados recebidos do servidor:', data);
             
             if (data.success) {
                 addMessage('system', data.response);
@@ -581,7 +591,26 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listeners
     sendBtn.addEventListener('click', sendMessage);
     
-    analyzeBtn.addEventListener('click', generateAnalysis);
+    // Remover event listener anterior
+    if (analyzeBtn) {
+        analyzeBtn.removeEventListener('click', generateAnalysis);
+        // Adicionar novo event listener
+        analyzeBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Botão de análise clicado');
+            generateAnalysis();
+        });
+    }
+    
+    // Adicionar também um event listener por data-action para maior compatibilidade
+    document.addEventListener('click', function(e) {
+        const target = e.target.closest('[data-action="analyze"]');
+        if (target) {
+            e.preventDefault();
+            console.log('Botão de análise clicado via data-action');
+            generateAnalysis();
+        }
+    });
     
     messageInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
