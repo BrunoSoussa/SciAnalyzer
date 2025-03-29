@@ -3,7 +3,7 @@ import tempfile
 import traceback
 import json
 import pickle
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template, session, send_file
 from flask_cors import CORS
 import google.generativeai as genai
 import PyPDF2
@@ -20,6 +20,13 @@ import unicodedata
 import uuid
 import time
 import hashlib
+# Importar ReportLab para geração de PDF
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import inch
+import html2text
 
 app = Flask(__name__)
 app.secret_key = 'secret_key_here'  # Add a secret key for session management
@@ -35,8 +42,71 @@ PDF_STORAGE_DIR = os.path.join(tempfile.gettempdir(), 'scianalyzer_pdfs')
 os.makedirs(PDF_STORAGE_DIR, exist_ok=True)
 app.logger.info(f"Diretorio de armazenamento de PDFs: {PDF_STORAGE_DIR}")
 
+# Diretorio para armazenar os critérios personalizados
+CRITERIA_STORAGE_DIR = os.path.join(tempfile.gettempdir(), 'scianalyzer_criteria')
+os.makedirs(CRITERIA_STORAGE_DIR, exist_ok=True)
+app.logger.info(f"Diretorio de armazenamento de critérios: {CRITERIA_STORAGE_DIR}")
+
 # Dicionario para armazenar timestamps de quando os PDFs foram armazenados
 pdf_timestamp_storage = {}
+
+# Funções para gerenciar critérios personalizados
+def save_custom_criteria(criteria_data):
+    """Salva os critérios personalizados em um arquivo JSON"""
+    try:
+        file_path = os.path.join(CRITERIA_STORAGE_DIR, 'custom_criteria.json')
+        
+        # Verificar se já existem critérios salvos
+        existing_criteria = {}
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                existing_criteria = json.load(f)
+        
+        # Mesclar com os novos critérios
+        existing_criteria.update(criteria_data)
+        
+        # Salvar critérios atualizados
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(existing_criteria, f, ensure_ascii=False, indent=4)
+            
+        app.logger.info(f"Critérios personalizados salvos em {file_path}")
+        return True
+    except Exception as e:
+        app.logger.error(f"Erro ao salvar critérios personalizados: {str(e)}")
+        return False
+
+def get_custom_criteria():
+    """Recupera os critérios personalizados do arquivo JSON"""
+    try:
+        file_path = os.path.join(CRITERIA_STORAGE_DIR, 'custom_criteria.json')
+        if not os.path.exists(file_path):
+            # Se o arquivo não existir, criar com os critérios padrão
+            default_criteria = {
+                "title": "Avalie se o título identifica claramente que se trata de uma revisão não sistemática (se aplicável).",
+                "abstract": "Avalie se o resumo contém todos os elementos essenciais: objetivo, métodos, resultados e conclusão.",
+                "introduction": "Avalie se o problema é bem definido, se justifica a importância da revisão e se os objetivos estão bem formulados.",
+                "eligibility": "Avalie se o artigo descreve os critérios de inclusão e exclusão dos estudos.",
+                "info_sources": "Avalie se o artigo indica todas as bases de dados utilizadas e período da pesquisa.",
+                "search_strategy": "Avalie se o artigo apresenta a estratégia de busca de forma clara e replicável (se aplicável).",
+                "selection_process": "Avalie se o artigo explica como os estudos foram selecionados (ex: número de revisores, etapas)."
+            }
+            save_custom_criteria(default_criteria)
+            return default_criteria
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        app.logger.error(f"Erro ao recuperar critérios personalizados: {str(e)}")
+        # Retornar critérios padrão em caso de erro
+        return {
+            "title": "Avalie se o título identifica claramente que se trata de uma revisão não sistemática (se aplicável).",
+            "abstract": "Avalie se o resumo contém todos os elementos essenciais: objetivo, métodos, resultados e conclusão.",
+            "introduction": "Avalie se o problema é bem definido, se justifica a importância da revisão e se os objetivos estão bem formulados.",
+            "eligibility": "Avalie se o artigo descreve os critérios de inclusão e exclusão dos estudos.",
+            "info_sources": "Avalie se o artigo indica todas as bases de dados utilizadas e período da pesquisa.",
+            "search_strategy": "Avalie se o artigo apresenta a estratégia de busca de forma clara e replicável (se aplicável).",
+            "selection_process": "Avalie se o artigo explica como os estudos foram selecionados (ex: número de revisores, etapas)."
+        }
 
 # Função para limpar PDFs antigos do armazenamento
 def cleanup_old_pdfs():
@@ -813,16 +883,8 @@ def analyze_existing_pdf():
 def create_scientific_analysis_prompt(pdf_text, criteria):
     """Create a prompt for scientific article analysis based on selected criteria"""
     
-    # Define the evaluation criteria descriptions
-    criteria_descriptions = {
-        "title": "Avalie se o título identifica claramente que se trata de uma revisão não sistemática (se aplicável).",
-        "abstract": "Avalie se o resumo contém todos os elementos essenciais: objetivo, métodos, resultados e conclusão.",
-        "introduction": "Avalie se o problema é bem definido, se justifica a importância da revisão e se os objetivos estão bem formulados.",
-        "eligibility": "Avalie se o artigo descreve os critérios de inclusão e exclusão dos estudos.",
-        "info_sources": "Avalie se o artigo indica todas as bases de dados utilizadas e período da pesquisa.",
-        "search_strategy": "Avalie se o artigo apresenta a estratégia de busca de forma clara e replicável (se aplicável).",
-        "selection_process": "Avalie se o artigo explica como os estudos foram selecionados (ex: número de revisores, etapas)."
-    }
+    # Obter os critérios personalizados
+    criteria_descriptions = get_custom_criteria()
     
     # Build the prompt based on selected criteria
     selected_criteria_text = ""
@@ -854,6 +916,160 @@ def create_scientific_analysis_prompt(pdf_text, criteria):
     ARTIGO CIENTÍFICO:\n{pdf_text}"""
     
     return prompt
+
+@app.route('/generate-pdf', methods=['POST'])
+def generate_pdf():
+    """Gera um PDF a partir do conteúdo HTML da análise"""
+    try:
+        data = request.json
+        
+        if not data or 'html_content' not in data:
+            return jsonify({"error": "Missing HTML content"}), 400
+            
+        html_content = data['html_content']
+        title = data.get('title', 'Análise de Artigo Científico')
+        
+        # Converter HTML para texto formatado
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.body_width = 0  # Sem quebra de linha automática
+        text_content = h.handle(html_content)
+        
+        # Gerar um nome de arquivo temporário para o PDF
+        pdf_filename = f"analise_{int(time.time())}.pdf"
+        pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
+        
+        # Criar o documento PDF
+        doc = SimpleDocTemplate(pdf_path, pagesize=letter,
+                              rightMargin=72, leftMargin=72,
+                              topMargin=72, bottomMargin=72)
+        
+        # Definir estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            name='CustomTitle',
+            parent=styles['Title'],
+            fontSize=18,
+            textColor=colors.purple,
+            spaceAfter=12
+        )
+        
+        # Criar elementos do PDF
+        elements = []
+        
+        # Título
+        elements.append(Paragraph(title, title_style))
+        elements.append(Spacer(1, 0.25*inch))
+        
+        # Conteúdo principal - converter o texto markdown para parágrafos
+        for line in text_content.split('\n'):
+            if line.strip():
+                if line.startswith('# '):
+                    # Cabeçalho nível 1
+                    elements.append(Paragraph(line[2:], styles['Heading1']))
+                    elements.append(Spacer(1, 0.1*inch))
+                elif line.startswith('## '):
+                    # Cabeçalho nível 2
+                    elements.append(Paragraph(line[3:], styles['Heading2']))
+                    elements.append(Spacer(1, 0.1*inch))
+                elif line.startswith('### '):
+                    # Cabeçalho nível 3
+                    elements.append(Paragraph(line[4:], styles['Heading3']))
+                    elements.append(Spacer(1, 0.1*inch))
+                elif line.startswith('* ') or line.startswith('- '):
+                    # Lista
+                    elements.append(Paragraph('• ' + line[2:], styles['BodyText']))
+                else:
+                    # Parágrafo normal
+                    elements.append(Paragraph(line, styles['BodyText']))
+                    elements.append(Spacer(1, 0.1*inch))
+            else:
+                elements.append(Spacer(1, 0.1*inch))
+        
+        # Rodapé
+        elements.append(Spacer(1, 0.5*inch))
+        footer_text = "Gerado por SciAnalyzer - 2025 JM2 Systems and Technologies"
+        elements.append(Paragraph(footer_text, styles['Italic']))
+        
+        # Gerar o PDF
+        doc.build(elements)
+        
+        app.logger.info(f"PDF gerado com sucesso: {pdf_path}")
+        
+        # Enviar o arquivo para download
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=f"analise_{int(time.time())}.pdf",
+            mimetype="application/pdf"
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Erro ao gerar PDF: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": f"Error generating PDF: {str(e)}"}), 500
+
+# Rotas para gerenciar critérios personalizados
+@app.route('/get-criteria', methods=['GET'])
+def get_criteria():
+    """Retorna todos os critérios personalizados"""
+    try:
+        criteria = get_custom_criteria()
+        return jsonify({"success": True, "criteria": criteria})
+    except Exception as e:
+        app.logger.error(f"Erro ao obter critérios: {str(e)}")
+        return jsonify({"error": f"Error getting criteria: {str(e)}"}), 500
+
+@app.route('/save-criteria', methods=['POST'])
+def save_criteria():
+    """Salva um novo critério ou atualiza um existente"""
+    try:
+        data = request.json
+        
+        if not data or 'key' not in data or 'description' not in data:
+            return jsonify({"error": "Missing required data (key or description)"}), 400
+        
+        # Criar um dicionário com o novo critério
+        new_criteria = {data['key']: data['description']}
+        
+        # Salvar o critério
+        if save_custom_criteria(new_criteria):
+            return jsonify({"success": True, "message": "Critério salvo com sucesso"})
+        else:
+            return jsonify({"error": "Failed to save criteria"}), 500
+    
+    except Exception as e:
+        app.logger.error(f"Erro ao salvar critério: {str(e)}")
+        return jsonify({"error": f"Error saving criteria: {str(e)}"}), 500
+
+@app.route('/delete-criteria', methods=['POST'])
+def delete_criteria():
+    """Remove um critério personalizado"""
+    try:
+        data = request.json
+        
+        if not data or 'key' not in data:
+            return jsonify({"error": "Missing required data (key)"}), 400
+        
+        # Obter critérios existentes
+        criteria = get_custom_criteria()
+        
+        # Verificar se o critério existe
+        if data['key'] not in criteria:
+            return jsonify({"error": "Criteria not found"}), 404
+        
+        # Remover o critério
+        del criteria[data['key']]
+        
+        # Salvar os critérios atualizados
+        if save_custom_criteria(criteria):
+            return jsonify({"success": True, "message": "Critério removido com sucesso"})
+        else:
+            return jsonify({"error": "Failed to delete criteria"}), 500
+    
+    except Exception as e:
+        app.logger.error(f"Erro ao remover critério: {str(e)}")
+        return jsonify({"error": f"Error deleting criteria: {str(e)}"}), 500
 
 # Executar limpeza periódica
 def periodic_cleanup():

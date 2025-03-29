@@ -1,0 +1,281 @@
+@app.route('/generate-pdf', methods=['POST'])
+def generate_pdf():
+    """Gera um PDF a partir do conteúdo HTML da análise"""
+    try:
+        data = request.json
+        
+        if not data or 'html_content' not in data:
+            return jsonify({"error": "Missing HTML content"}), 400
+            
+        html_content = data['html_content']
+        title = data.get('title', 'Análise de Artigo Científico')
+        
+        # Converter HTML para texto formatado
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.body_width = 0  # Sem quebra de linha automática
+        h.unicode_snob = True  # Preservar caracteres unicode
+        h.single_line_break = False  # Preservar quebras de linha
+        h.protect_links = True  # Manter URLs na saída
+        text_content = h.handle(html_content)
+        
+        # Gerar um nome de arquivo temporário para o PDF
+        pdf_filename = f"analise_{int(time.time())}.pdf"
+        pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
+        
+        # Criar o documento PDF com uma cor de fundo suave
+        doc = SimpleDocTemplate(
+            pdf_path, 
+            pagesize=letter,
+            rightMargin=54, 
+            leftMargin=54,
+            topMargin=72, 
+            bottomMargin=72,
+            title=title
+        )
+        
+        # Definir estilos personalizados mais atraente e refinados
+        styles = getSampleStyleSheet()
+        
+        # Estilo para título principal
+        title_style = ParagraphStyle(
+            name='CustomTitle',
+            parent=styles['Title'],
+            fontSize=24,
+            leading=30,  # Espaçamento entre linhas
+            textColor=colors.HexColor('#4f46e5'),  # Cor roxa igual da aplicação
+            alignment=1,  # Centralizado
+            spaceAfter=24,
+            fontName='Helvetica-Bold'
+        )
+        
+        # Estilo para cabeçalhos
+        heading1_style = ParagraphStyle(
+            name='CustomHeading1',
+            parent=styles['Heading1'],
+            fontSize=18,
+            leading=22,
+            textColor=colors.HexColor('#4f46e5'),
+            spaceBefore=12,
+            spaceAfter=10,
+            borderWidth=0,
+            borderPadding=0,
+            borderColor=None,
+            borderRadius=None,
+            fontName='Helvetica-Bold'
+        )
+        
+        heading2_style = ParagraphStyle(
+            name='CustomHeading2',
+            parent=styles['Heading2'],
+            fontSize=16,
+            leading=20,
+            textColor=colors.HexColor('#3730a3'),  # Um tom mais escuro de roxo
+            spaceBefore=10,
+            spaceAfter=8,
+            fontName='Helvetica-Bold'
+        )
+        
+        heading3_style = ParagraphStyle(
+            name='CustomHeading3',
+            parent=styles['Heading3'],
+            fontSize=14,
+            leading=17,
+            textColor=colors.HexColor('#312e81'),  # Um tom ainda mais escuro
+            spaceBefore=8,
+            spaceAfter=6,
+            fontName='Helvetica-Bold'
+        )
+        
+        # Estilo para parágrafos normais
+        normal_style = ParagraphStyle(
+            name='CustomNormal',
+            parent=styles['Normal'],
+            fontSize=11,
+            leading=15,
+            spaceBefore=4,
+            spaceAfter=8,
+            fontName='Helvetica'
+        )
+        
+        # Estilo para itens de lista
+        list_style = ParagraphStyle(
+            name='CustomBullet',
+            parent=styles['Normal'],
+            fontSize=11,
+            leading=15,
+            leftIndent=20,
+            spaceBefore=2,
+            spaceAfter=5,
+            fontName='Helvetica',
+            bulletIndent=10,
+            firstLineIndent=0
+        )
+        
+        # Estilo para rodapé
+        footer_style = ParagraphStyle(
+            name='Footer',
+            parent=styles['Normal'],
+            alignment=1,  # Centralizado
+            textColor=colors.HexColor('#6b7280'),  # Cinza
+            fontSize=9,
+            spaceBefore=30
+        )
+        
+        # Criar elementos do PDF
+        elements = []
+        
+        # Adicionar uma capa bonita com logo
+        # Logo JM2 (disponibilizado como uma URL base64 ou caminho para imagem)
+        logo_path = 'static/images/jm2-logo.png'
+        if os.path.exists(logo_path):
+            elements.append(Spacer(1, 1*inch))  # Espaço no topo
+            try:
+                from reportlab.platypus import Image
+                logo = Image(logo_path, width=2.5*inch, height=1*inch)
+                logo.hAlign = 'CENTER'
+                elements.append(logo)
+                elements.append(Spacer(1, 0.5*inch))
+            except Exception as e:
+                app.logger.warning(f"Erro ao carregar logo: {str(e)}")
+        
+        # Título
+        elements.append(Paragraph(title, title_style))
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # Data e hora de geração
+        date_text = f"Gerado em: {time.strftime('%d/%m/%Y %H:%M:%S')}"
+        elements.append(Paragraph(date_text, footer_style))
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # Linha horizontal
+        from reportlab.platypus import HRFlowable
+        elements.append(HRFlowable(
+            width="100%",
+            thickness=1,
+            color=colors.HexColor('#e2e8f0'),
+            spaceAfter=0.3*inch
+        ))
+        
+        # Conteúdo principal - melhor processamento do texto markdown
+        in_list = False  # Para acompanhar se estamos em uma lista
+        list_items = []  # Coletar itens da lista
+        
+        for line in text_content.split('\n'):
+            if not line.strip():
+                if in_list:
+                    # Finalizar lista anterior se estiver em uma
+                    for item in list_items:
+                        bullet_text = f"\u2022 {item}"
+                        elements.append(Paragraph(bullet_text, list_style))
+                    list_items = []
+                    in_list = False
+                elements.append(Spacer(1, 0.1*inch))
+                continue
+            
+            if line.startswith('# '):
+                # Finalizar lista anterior se estiver em uma
+                if in_list:
+                    for item in list_items:
+                        bullet_text = f"\u2022 {item}"
+                        elements.append(Paragraph(bullet_text, list_style))
+                    list_items = []
+                    in_list = False
+                
+                # Cabeçalho nível 1
+                elements.append(Paragraph(line[2:], heading1_style))
+            elif line.startswith('## '):
+                # Finalizar lista anterior se estiver em uma
+                if in_list:
+                    for item in list_items:
+                        bullet_text = f"\u2022 {item}"
+                        elements.append(Paragraph(bullet_text, list_style))
+                    list_items = []
+                    in_list = False
+                
+                # Cabeçalho nível 2
+                elements.append(Paragraph(line[3:], heading2_style))
+            elif line.startswith('### '):
+                # Finalizar lista anterior se estiver em uma
+                if in_list:
+                    for item in list_items:
+                        bullet_text = f"\u2022 {item}"
+                        elements.append(Paragraph(bullet_text, list_style))
+                    list_items = []
+                    in_list = False
+                
+                # Cabeçalho nível 3
+                elements.append(Paragraph(line[4:], heading3_style))
+            elif line.startswith('* ') or line.startswith('- '):
+                # Item de lista
+                in_list = True
+                list_items.append(line[2:])  # Remover o marcador
+            else:
+                # Finalizar lista anterior se estiver em uma
+                if in_list:
+                    for item in list_items:
+                        bullet_text = f"\u2022 {item}"
+                        elements.append(Paragraph(bullet_text, list_style))
+                    list_items = []
+                    in_list = False
+                
+                # Parágrafo normal
+                elements.append(Paragraph(line, normal_style))
+        
+        # Finalizar última lista se necessário
+        if in_list:
+            for item in list_items:
+                bullet_text = f"\u2022 {item}"
+                elements.append(Paragraph(bullet_text, list_style))
+        
+        # Linha horizontal antes do rodapé
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(HRFlowable(
+            width="100%",
+            thickness=1,
+            color=colors.HexColor('#e2e8f0'),
+            spaceAfter=0.2*inch
+        ))
+        
+        # Rodapé
+        footer_text = "Powered by SciAnalyzer - 2025 JM2 - Systems and Technologies - (86) 99986-8712"
+        elements.append(Paragraph(footer_text, footer_style))
+        
+        # Definir uma classe PageTemplate personalizada para adicionar números de página
+        from reportlab.platypus.frames import Frame
+        from reportlab.platypus.doctemplate import PageTemplate, BaseDocTemplate
+        from reportlab.pdfgen.canvas import Canvas
+        
+        def add_page_number(canvas, doc):
+            canvas.saveState()
+            canvas.setFont('Helvetica', 9)
+            canvas.setFillColor(colors.HexColor('#6b7280'))
+            page_num = f"Página {doc.page} de {doc.build.maxPages or '?'}"
+            canvas.drawRightString(letter[0] - 54, 36, page_num)
+            canvas.restoreState()
+        
+        # Adicionar template de página personalizado
+        frame = Frame(doc.leftMargin, doc.bottomMargin, 
+                     letter[0] - doc.leftMargin - doc.rightMargin,
+                     letter[1] - doc.topMargin - doc.bottomMargin,
+                     id='normal')
+        template = PageTemplate(id='later', frames=frame, onPage=add_page_number)
+        doc.addPageTemplates([template])
+        
+        # Gerar o PDF
+        doc.build(elements)
+        
+        app.logger.info(f"PDF gerado com sucesso: {pdf_path}")
+        
+        # Enviar o arquivo para download
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=f"analise_{int(time.time())}.pdf",
+            mimetype="application/pdf"
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Erro ao gerar PDF: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": f"Error generating PDF: {str(e)}"}), 500
