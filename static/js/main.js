@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const criteriaPanel = document.getElementById('criteriaPanel');
     const addCriteriaBtn = document.getElementById('addCriteriaBtn');
     
-    // Elementos do modal de critu00e9rios
+    // Elementos do modal de critérios
     const criteriaModal = document.getElementById('criteriaModal');
     const modalTitle = document.getElementById('modalTitle');
     const criteriaKey = document.getElementById('criteriaKey');
@@ -21,14 +21,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeModalBtn = document.getElementById('closeModalBtn');
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     
-    // Elementos do modal de confirmau00e7u00e3o
+    // Elementos do modal de confirmação
     const confirmModal = document.getElementById('confirmModal');
     const confirmMessage = document.getElementById('confirmMessage');
     const confirmBtn = document.getElementById('confirmBtn');
     const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
     const closeConfirmBtn = document.getElementById('closeConfirmBtn');
     
-    // Varu00e1veis de estado
+    // Variáveis de estado
     let currentPdfId = null;
     let currentPdfName = null;
     let isEditingCriteria = false;
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedCriteria = [];
     let confirmCallback = null;
     
-    // Carregar critu00e9rios do servidor
+    // Carregar critérios do servidor
     function loadCriteria() {
         fetch('/get-criteria')
             .then(response => response.json())
@@ -46,15 +46,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     criteria = data.criteria;
                     renderCriteriaList();
                 } else {
-                    console.error('Erro ao carregar critu00e9rios:', data.error);
+                    console.error('Erro ao carregar critérios:', data.error);
                 }
             })
             .catch(error => {
-                console.error('Erro ao carregar critu00e9rios:', error);
+                console.error('Erro ao carregar critérios:', error);
             });
     }
     
-    // Renderizar lista de critu00e9rios
+    // Renderizar lista de critérios
     function renderCriteriaList() {
         criteriaList.innerHTML = '';
         
@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const editBtn = document.createElement('button');
             editBtn.className = 'btn-action';
             editBtn.innerHTML = '<i class="fas fa-edit"></i>';
-            editBtn.title = 'Editar critu00e9rio';
+            editBtn.title = 'Editar critério';
             editBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 openEditCriteriaModal(key);
@@ -97,11 +97,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'btn-action';
             deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
-            deleteBtn.title = 'Excluir critu00e9rio';
+            deleteBtn.title = 'Excluir critério';
             deleteBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 showConfirmModal(
-                    `Tem certeza que deseja excluir o critu00e9rio "${key}"?`,
+                    `Tem certeza que deseja excluir o critério "${key}"?`,
                     () => deleteCriteria(key)
                 );
             });
@@ -117,9 +117,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Abrir modal para adicionar novo critu00e9rio
+    // Abrir modal para adicionar novo critério
     function openAddCriteriaModal() {
-        modalTitle.textContent = 'Adicionar Critu00e9rio';
+        modalTitle.textContent = 'Adicionar Critério';
         criteriaKey.value = '';
         criteriaDescription.value = '';
         criteriaKey.disabled = false;
@@ -128,9 +128,9 @@ document.addEventListener('DOMContentLoaded', function() {
         criteriaModal.style.display = 'flex';
     }
     
-    // Abrir modal para editar critu00e9rio existente
+    // Abrir modal para editar critério existente
     function openEditCriteriaModal(key) {
-        modalTitle.textContent = 'Editar Critu00e9rio';
+        modalTitle.textContent = 'Editar Critério';
         criteriaKey.value = key;
         criteriaDescription.value = criteria[key];
         criteriaKey.disabled = true;
@@ -139,35 +139,35 @@ document.addEventListener('DOMContentLoaded', function() {
         criteriaModal.style.display = 'flex';
     }
     
-    // Fechar modal de critu00e9rios
+    // Fechar modal de critérios
     function closeCriteriaModal() {
         criteriaModal.style.display = 'none';
     }
     
-    // Salvar critu00e9rio (novo ou editado)
+    // Salvar critério (novo ou editado)
     function saveCriteria() {
         const key = criteriaKey.value.trim();
         const description = criteriaDescription.value.trim();
         
         if (!key) {
-            alert('O identificador do critu00e9rio u00e9 obrigatu00f3rio');
+            alert('O identificador do critério é obrigatório');
             return;
         }
         
         if (!description) {
-            alert('A descriu00e7u00e3o do critu00e9rio u00e9 obrigatu00f3ria');
+            alert('A descrição do critério é obrigatória');
             return;
         }
         
-        // Validar formato do identificador (apenas letras minu00fasculas, nu00fameros e underscores)
+        // Validar formato do identificador (apenas letras minúsculas, números e underscores)
         if (!/^[a-z0-9_]+$/.test(key)) {
-            alert('O identificador deve conter apenas letras minu00fasculas, nu00fameros e underscores');
+            alert('O identificador deve conter apenas letras minúsculas, números e underscores');
             return;
         }
         
-        // Se nu00e3o estiver editando e a chave ju00e1 existir
+        // Se não estiver editando e a chave já existir
         if (!isEditingCriteria && criteria[key]) {
-            alert(`O critu00e9rio "${key}" ju00e1 existe. Escolha outro identificador.`);
+            alert(`O critério "${key}" já existe. Escolha outro identificador.`);
             return;
         }
         
@@ -191,17 +191,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderCriteriaList();
                 closeCriteriaModal();
             } else {
-                alert(`Erro ao salvar critu00e9rio: ${data.error}`);
+                alert(`Erro ao salvar critério: ${data.error}`);
             }
         })
         .catch(error => {
             hideLoading();
-            console.error('Erro ao salvar critu00e9rio:', error);
-            alert('Ocorreu um erro ao salvar o critu00e9rio. Tente novamente.');
+            console.error('Erro ao salvar critério:', error);
+            alert('Ocorreu um erro ao salvar o critério. Tente novamente.');
         });
     }
     
-    // Excluir critu00e9rio
+    // Excluir critério
     function deleteCriteria(key) {
         showLoading();
         
@@ -220,24 +220,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 selectedCriteria = selectedCriteria.filter(k => k !== key);
                 renderCriteriaList();
             } else {
-                alert(`Erro ao excluir critu00e9rio: ${data.error}`);
+                alert(`Erro ao excluir critério: ${data.error}`);
             }
         })
         .catch(error => {
             hideLoading();
-            console.error('Erro ao excluir critu00e9rio:', error);
-            alert('Ocorreu um erro ao excluir o critu00e9rio. Tente novamente.');
+            console.error('Erro ao excluir critério:', error);
+            alert('Ocorreu um erro ao excluir o critério. Tente novamente.');
         });
     }
     
-    // Mostrar modal de confirmau00e7u00e3o
+    // Mostrar modal de confirmação
     function showConfirmModal(message, callback) {
         confirmMessage.textContent = message;
         confirmCallback = callback;
         confirmModal.style.display = 'flex';
     }
     
-    // Fechar modal de confirmau00e7u00e3o
+    // Fechar modal de confirmação
     function closeConfirmModal() {
         confirmModal.style.display = 'none';
         confirmCallback = null;
@@ -277,14 +277,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Formatar markdown para HTML
     function formatMarkdown(text) {
-        // Preservar blocos de cu00f3digo antes de outras transformau00e7u00f5es
+        // Preservar blocos de código antes de outras transformações
         const codeBlocks = [];
         text = text.replace(/```([\s\S]+?)```/g, function(match) {
             codeBlocks.push(match);
             return "%%CODEBLOCK_" + (codeBlocks.length - 1) + "%%";
         });
         
-        // Preservar cu00f3digo inline
+        // Preservar código inline
         const inlineCode = [];
         text = text.replace(/`([^`]+)`/g, function(match) {
             inlineCode.push(match);
@@ -294,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Substituir links por elementos <a>
         text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
         
-        // Formatar tu00edtulos
+        // Formatar títulos
         text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
         text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
         text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
@@ -305,7 +305,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Substituir *texto* por <em>texto</em>
         text = text.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
         
-        // Formatar listas nu00e3o ordenadas
+        // Formatar listas não ordenadas
         text = text.replace(/^\* (.+)$/gm, '<li>$1</li>');
         text = text.replace(/^- (.+)$/gm, '<li>$1</li>');
         
@@ -344,19 +344,19 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
-        // Formatar citau00e7u00f5es
+        // Formatar citações
         text = text.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
         
         // Substituir quebras de linha por <br>
         text = text.replace(/\n/g, '<br>');
         
-        // Restaurar blocos de cu00f3digo
+        // Restaurar blocos de código
         for (let i = 0; i < codeBlocks.length; i++) {
             let code = codeBlocks[i].replace(/```([\s\S]+?)```/g, '$1').trim();
             text = text.replace("%%CODEBLOCK_" + i + "%%", `<pre><code>${code}</code></pre>`);
         }
         
-        // Restaurar cu00f3digo inline
+        // Restaurar código inline
         for (let i = 0; i < inlineCode.length; i++) {
             let code = inlineCode[i].replace(/`([^`]+)`/g, '$1');
             text = text.replace("%%INLINECODE_" + i + "%%", `<code>${code}</code>`);
@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return text;
     }
     
-    // Adicionar indicador de digitau00e7u00e3o
+    // Adicionar indicador de digitação
     function addTypingIndicator() {
         const typingDiv = document.createElement('div');
         typingDiv.className = 'message system-message typing-indicator';
@@ -383,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
     
-    // Remover indicador de digitau00e7u00e3o
+    // Remover indicador de digitação
     function removeTypingIndicator() {
         const typingIndicator = document.getElementById('typingIndicator');
         if (typingIndicator) {
@@ -400,20 +400,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (!currentPdfId) {
-            addMessage('system', 'Por favor, fau00e7a upload de um PDF antes de enviar uma mensagem.', true);
+            addMessage('system', 'Por favor, faça upload de um PDF antes de enviar uma mensagem.', true);
             return;
         }
         
-        // Adicionar mensagem do usuu00e1rio ao chat
+        // Adicionar mensagem do usuário ao chat
         addMessage('user', message);
         
         // Limpar campo de entrada
         messageInput.value = '';
         
-        // Mostrar indicador de digitau00e7u00e3o
+        // Mostrar indicador de digitação
         addTypingIndicator();
         
-        // Obter critu00e9rios selecionados
+        // Obter critérios selecionados
         const criteriaToSend = {};
         selectedCriteria.forEach(key => {
             criteriaToSend[key] = criteria[key];
@@ -434,7 +434,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
-            // Remover indicador de digitau00e7u00e3o
+            // Remover indicador de digitação
             removeTypingIndicator();
             
             if (data.success) {
@@ -444,7 +444,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            // Remover indicador de digitau00e7u00e3o
+            // Remover indicador de digitação
             removeTypingIndicator();
             
             console.error('Erro ao enviar mensagem:', error);
@@ -452,40 +452,40 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Gerar anu00e1lise completa
+    // Gerar análise completa
     function generateAnalysis() {
         if (!currentPdfId) {
-            addMessage('system', 'Por favor, fau00e7a upload de um PDF antes de gerar uma anu00e1lise.', true);
+            addMessage('system', 'Por favor, faça upload de um PDF antes de gerar uma análise.', true);
             return;
         }
         
-        // Adicionar mensagem do usuu00e1rio ao chat
-        addMessage('user', 'Gerar anu00e1lise completa do documento');
+        // Adicionar mensagem do usuário ao chat
+        addMessage('user', 'Gerar análise completa do documento');
         
-        // Mostrar indicador de digitau00e7u00e3o
+        // Mostrar indicador de digitação
         addTypingIndicator();
         
-        // Obter critu00e9rios selecionados
+        // Obter critérios selecionados
         const criteriaToSend = {};
         selectedCriteria.forEach(key => {
             criteriaToSend[key] = criteria[key];
         });
         
-        // Se nu00e3o houver critu00e9rios selecionados, usar todos os critu00e9rios disponu00edveis
+        // Se não houver critérios selecionados, usar todos os critérios disponíveis
         if (Object.keys(criteriaToSend).length === 0) {
             Object.keys(criteria).forEach(key => {
                 criteriaToSend[key] = criteria[key];
             });
         }
         
-        // Enviar solicitau00e7u00e3o de anu00e1lise para o servidor
+        // Enviar solicitação de análise para o servidor
         fetch('/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: 'Fau00e7a uma anu00e1lise completa deste artigo',
+                message: 'Faça uma análise completa deste artigo',
                 pdf_id: currentPdfId,
                 criteria: criteriaToSend,
                 is_analysis: true
@@ -493,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
-            // Remover indicador de digitau00e7u00e3o
+            // Remover indicador de digitação
             removeTypingIndicator();
             
             if (data.success) {
@@ -503,11 +503,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            // Remover indicador de digitau00e7u00e3o
+            // Remover indicador de digitação
             removeTypingIndicator();
             
-            console.error('Erro ao gerar anu00e1lise:', error);
-            addMessage('system', 'Ocorreu um erro ao gerar a anu00e1lise. Tente novamente.', true);
+            console.error('Erro ao gerar análise:', error);
+            addMessage('system', 'Ocorreu um erro ao gerar a análise. Tente novamente.', true);
         });
     }
     
@@ -520,7 +520,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (file.type !== 'application/pdf') {
-            addMessage('system', 'Por favor, selecione um arquivo PDF vu00e1lido.', true);
+            addMessage('system', 'Por favor, selecione um arquivo PDF válido.', true);
             return;
         }
         
@@ -543,7 +543,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 currentPdfId = data.pdf_id;
                 currentPdfName = file.name;
-                addMessage('system', `PDF "${file.name}" carregado com sucesso. Agora vocu00ea pode fazer perguntas sobre o conteu00fado.`);
+                addMessage('system', `PDF "${file.name}" carregado com sucesso. Agora você pode fazer perguntas sobre o conteúdo.`);
             } else {
                 addMessage('system', `Erro ao carregar PDF: ${data.error}`, true);
             }
@@ -555,7 +555,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Alternar visibilidade do painel de critu00e9rios
+    // Alternar visibilidade do painel de critérios
     function toggleCriteriaPanel() {
         const content = criteriaPanel.querySelector('.criteria-content');
         const icon = toggleCriteriaBtn.querySelector('i');

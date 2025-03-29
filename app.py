@@ -324,7 +324,7 @@ def chat():
         
         # Construir o prompt com base no tipo de solicitação (análise ou pergunta)
         if is_analysis:
-            prompt = create_analysis_prompt(pdf_text, pdf_filename, selected_criteria)
+            prompt = create_analysis_prompt_full(pdf_text, pdf_filename, selected_criteria)
         else:
             prompt = create_question_prompt(pdf_text, message, selected_criteria)
         
@@ -338,7 +338,7 @@ def chat():
         return jsonify({"success": False, "error": f"Erro ao processar mensagem: {str(e)}"})
 
 # Função para criar o prompt de análise completa
-def create_analysis_prompt(pdf_text, pdf_filename, criteria):
+def create_analysis_prompt_full(pdf_text, pdf_filename, criteria):
     prompt = f"""Faça uma análise completa e detalhada do seguinte artigo científico: '{pdf_filename}'.
 
 Conteúdo do PDF:
