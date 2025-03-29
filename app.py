@@ -312,6 +312,7 @@ def chat():
         message = data.get('message', '')
         pdf_id = data.get('pdf_id')
         selected_criteria = data.get('criteria', {})
+        is_analysis = data.get('is_analysis', False)
         
         # Verificar se o PDF existe
         if not pdf_id or pdf_id not in pdf_storage:
@@ -319,15 +320,13 @@ def chat():
         
         # Obter o texto do PDF
         pdf_text = pdf_storage[pdf_id]["text"]
+        pdf_filename = pdf_storage[pdf_id]["filename"]
         
-        # Construir o prompt com base nos critérios selecionados
-        prompt = f"Pergunta do usuário: {message}\n\nConteúdo do PDF:\n{pdf_text}\n\n"
-        
-        # Adicionar critérios selecionados ao prompt
-        if selected_criteria:
-            prompt += "\nConsidere os seguintes critérios de análise:\n"
-            for key, description in selected_criteria.items():
-                prompt += f"- {key}: {description}\n"
+        # Construir o prompt com base no tipo de solicitação (análise ou pergunta)
+        if is_analysis:
+            prompt = create_analysis_prompt(pdf_text, pdf_filename, selected_criteria)
+        else:
+            prompt = create_question_prompt(pdf_text, message, selected_criteria)
         
         # Gerar resposta
         response = generate_gemini_response(prompt)
@@ -337,6 +336,70 @@ def chat():
     except Exception as e:
         logger.error(f"Erro no chat: {str(e)}")
         return jsonify({"success": False, "error": f"Erro ao processar mensagem: {str(e)}"})
+
+# Função para criar o prompt de análise completa
+def create_analysis_prompt(pdf_text, pdf_filename, criteria):
+    prompt = f"""Faça uma análise completa e detalhada do seguinte artigo científico: '{pdf_filename}'.
+
+Conteúdo do PDF:
+{pdf_text}
+
+"""
+    
+    if criteria:
+        prompt += "Organize sua análise de acordo com os seguintes critérios:\n\n"
+        for key, description in criteria.items():
+            prompt += f"## {key.capitalize()}\n{description}\n\n"
+    else:
+        prompt += """Organize sua análise incluindo as seguintes seções:
+
+## Resumo
+Um resumo conciso do artigo.
+
+## Metodologia
+Análise da metodologia utilizada.
+
+## Resultados Principais
+Os principais resultados e descobertas.
+
+## Conclusões
+As conclusões do artigo e se são suportadas pelos resultados.
+
+## Limitações
+As limitações do estudo.
+
+## Relevância
+A relevância e contribuição para o campo.
+"""
+    
+    prompt += """
+
+Formate sua resposta em markdown para melhor legibilidade. 
+Utilize títulos, sub­títulos, listas e negrito para destacar informações importantes.
+Se encontrar tabelas no texto, formate-as de maneira organizada.
+Seja detalhado, mas conciso. Baseie sua análise apenas no conteúdo do PDF fornecido.
+"""
+    
+    return prompt
+
+# Função para criar o prompt de pergunta
+def create_question_prompt(pdf_text, question, criteria):
+    prompt = f"Pergunta do usuário: {question}\n\nConteúdo do PDF:\n{pdf_text}\n\n"
+    
+    if criteria:
+        prompt += "\nConsidere os seguintes critérios de análise ao responder:\n"
+        for key, description in criteria.items():
+            prompt += f"- {key}: {description}\n"
+    
+    prompt += """
+
+Formate sua resposta em markdown para melhor legibilidade.
+Utilize títulos, listas e negrito para destacar informações importantes.
+Se encontrar tabelas no texto, formate-as de maneira organizada.
+Seja detalhado, mas conciso. Baseie sua resposta apenas no conteúdo do PDF fornecido.
+"""
+    
+    return prompt
 
 # Rota para obter critérios de análise
 @app.route('/get-criteria', methods=['GET'])

@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatMessages = document.getElementById('chatMessages');
     const messageInput = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
+    const analyzeBtn = document.getElementById('analyzeBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const pdfFileInput = document.getElementById('pdfFileInput');
     const loadingOverlay = document.getElementById('loadingOverlay');
@@ -280,6 +281,16 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Substituir quebras de linha por <br>
             content = content.replace(/\n/g, '<br>');
+            
+            // Formatar tu00edtulos
+            content = content.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+            content = content.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+            content = content.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+            
+            // Formatar listas
+            content = content.replace(/^\* (.+)$/gm, '<li>$1</li>');
+            content = content.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+            content = content.replace(/(<li>.+<\/li>\s*)+/g, '<ul>$&</ul>');
         }
         
         messageDiv.innerHTML = `
@@ -288,6 +299,32 @@ document.addEventListener('DOMContentLoaded', function() {
         
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Adicionar indicador de digitau00e7u00e3o
+    function addTypingIndicator() {
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message system-message typing-indicator';
+        typingDiv.id = 'typingIndicator';
+        
+        typingDiv.innerHTML = `
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        `;
+        
+        chatMessages.appendChild(typingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Remover indicador de digitau00e7u00e3o
+    function removeTypingIndicator() {
+        const typingIndicator = document.getElementById('typingIndicator');
+        if (typingIndicator) {
+            typingIndicator.remove();
+        }
     }
     
     // Enviar mensagem para o chat
@@ -309,8 +346,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Limpar campo de entrada
         messageInput.value = '';
         
-        // Mostrar indicador de carregamento
-        showLoading();
+        // Mostrar indicador de digitau00e7u00e3o
+        addTypingIndicator();
         
         // Obter critu00e9rios selecionados
         const criteriaToSend = {};
@@ -327,12 +364,14 @@ document.addEventListener('DOMContentLoaded', function() {
             body: JSON.stringify({
                 message: message,
                 pdf_id: currentPdfId,
-                criteria: criteriaToSend
+                criteria: criteriaToSend,
+                is_analysis: false
             })
         })
         .then(response => response.json())
         .then(data => {
-            hideLoading();
+            // Remover indicador de digitau00e7u00e3o
+            removeTypingIndicator();
             
             if (data.success) {
                 addMessage('system', data.response);
@@ -341,9 +380,70 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            hideLoading();
+            // Remover indicador de digitau00e7u00e3o
+            removeTypingIndicator();
+            
             console.error('Erro ao enviar mensagem:', error);
             addMessage('system', 'Ocorreu um erro ao processar sua mensagem. Tente novamente.', true);
+        });
+    }
+    
+    // Gerar anu00e1lise completa
+    function generateAnalysis() {
+        if (!currentPdfId) {
+            addMessage('system', 'Por favor, fau00e7a upload de um PDF antes de gerar uma anu00e1lise.', true);
+            return;
+        }
+        
+        // Adicionar mensagem do usuu00e1rio ao chat
+        addMessage('user', 'Gerar anu00e1lise completa do documento');
+        
+        // Mostrar indicador de digitau00e7u00e3o
+        addTypingIndicator();
+        
+        // Obter critu00e9rios selecionados
+        const criteriaToSend = {};
+        selectedCriteria.forEach(key => {
+            criteriaToSend[key] = criteria[key];
+        });
+        
+        // Se nu00e3o houver critu00e9rios selecionados, usar todos os critu00e9rios disponu00edveis
+        if (Object.keys(criteriaToSend).length === 0) {
+            Object.keys(criteria).forEach(key => {
+                criteriaToSend[key] = criteria[key];
+            });
+        }
+        
+        // Enviar solicitau00e7u00e3o de anu00e1lise para o servidor
+        fetch('/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: 'Fau00e7a uma anu00e1lise completa deste artigo',
+                pdf_id: currentPdfId,
+                criteria: criteriaToSend,
+                is_analysis: true
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Remover indicador de digitau00e7u00e3o
+            removeTypingIndicator();
+            
+            if (data.success) {
+                addMessage('system', data.response);
+            } else {
+                addMessage('system', `Erro: ${data.error}`, true);
+            }
+        })
+        .catch(error => {
+            // Remover indicador de digitau00e7u00e3o
+            removeTypingIndicator();
+            
+            console.error('Erro ao gerar anu00e1lise:', error);
+            addMessage('system', 'Ocorreu um erro ao gerar a anu00e1lise. Tente novamente.', true);
         });
     }
     
@@ -407,6 +507,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Event listeners
     sendBtn.addEventListener('click', sendMessage);
+    
+    analyzeBtn.addEventListener('click', generateAnalysis);
     
     messageInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
