@@ -488,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: 'Faça uma análise completa deste artigo.',
+                message: 'ANALISE_COMPLETA',
                 pdf_id: currentPdfId,
                 criteria: criteriaToSend,
                 is_analysis: true

@@ -329,7 +329,7 @@ def chat():
         logger.info(f"Processando PDF: {pdf_filename} (id: {pdf_id})")
         
         # Construir o prompt com base no tipo de solicitação (análise ou pergunta)
-        if is_analysis:
+        if is_analysis or message == "ANALISE_COMPLETA":
             logger.info("Gerando análise completa")
             prompt = create_analysis_prompt_full(pdf_text, pdf_filename, selected_criteria)
         else:
