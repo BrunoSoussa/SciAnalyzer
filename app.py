@@ -314,42 +314,27 @@ def chat():
         selected_criteria = data.get('criteria', {})
         is_analysis = data.get('is_analysis', False)
         
-        logger.info(f"Recebida solicitação de chat: message='{message}', pdf_id='{pdf_id}', is_analysis={is_analysis}")
-        logger.info(f"Critérios selecionados: {selected_criteria}")
-        
         # Verificar se o PDF existe
         if not pdf_id or pdf_id not in pdf_storage:
-            logger.error(f"PDF não encontrado: {pdf_id}")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
         # Obter o texto do PDF
         pdf_text = pdf_storage[pdf_id]["text"]
         pdf_filename = pdf_storage[pdf_id]["filename"]
         
-        logger.info(f"Processando PDF: {pdf_filename} (id: {pdf_id})")
-        
-        # Verificar se é uma solicitação de análise
-        do_analysis = is_analysis or message == "ANALISE_COMPLETA" or "analise" in message.lower() or "análise" in message.lower()
-        
-        # Construir o prompt com base no tipo de solicitação
-        if do_analysis:
-            logger.info("Gerando análise completa")
+        # Construir o prompt com base no tipo de solicitação (análise ou pergunta)
+        if is_analysis:
             prompt = create_analysis_prompt_full(pdf_text, pdf_filename, selected_criteria)
         else:
-            logger.info("Respondendo pergunta específica")
             prompt = create_question_prompt(pdf_text, message, selected_criteria)
         
         # Gerar resposta
-        logger.info("Enviando prompt para o Gemini")
         response = generate_gemini_response(prompt)
-        logger.info("Resposta recebida do Gemini")
         
         return jsonify({"success": True, "response": response})
     
     except Exception as e:
         logger.error(f"Erro no chat: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": f"Erro ao processar mensagem: {str(e)}"})
 
 # Função para criar o prompt de análise completa
