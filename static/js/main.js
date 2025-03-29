@@ -478,6 +478,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
+        console.log('Enviando solicitação de análise com os seguintes critérios:', criteriaToSend);
+        console.log('PDF ID:', currentPdfId);
+        
         // Enviar solicitação de análise para o servidor
         fetch('/chat', {
             method: 'POST',
@@ -485,13 +488,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: 'Faça uma análise completa deste artigo',
+                message: 'Faça uma análise completa deste artigo.',
                 pdf_id: currentPdfId,
                 criteria: criteriaToSend,
                 is_analysis: true
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Erro HTTP: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             // Remover indicador de digitação
             removeTypingIndicator();
@@ -499,6 +507,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 addMessage('system', data.response);
             } else {
+                console.error('Erro na resposta do servidor:', data.error);
                 addMessage('system', `Erro: ${data.error}`, true);
             }
         })

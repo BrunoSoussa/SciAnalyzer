@@ -314,22 +314,32 @@ def chat():
         selected_criteria = data.get('criteria', {})
         is_analysis = data.get('is_analysis', False)
         
+        logger.info(f"Recebida solicitação de chat: message={message}, pdf_id={pdf_id}, is_analysis={is_analysis}")
+        logger.info(f"Critérios selecionados: {selected_criteria}")
+        
         # Verificar se o PDF existe
         if not pdf_id or pdf_id not in pdf_storage:
+            logger.error(f"PDF não encontrado: {pdf_id}")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
         # Obter o texto do PDF
         pdf_text = pdf_storage[pdf_id]["text"]
         pdf_filename = pdf_storage[pdf_id]["filename"]
         
+        logger.info(f"Processando PDF: {pdf_filename} (id: {pdf_id})")
+        
         # Construir o prompt com base no tipo de solicitação (análise ou pergunta)
         if is_analysis:
+            logger.info("Gerando análise completa")
             prompt = create_analysis_prompt_full(pdf_text, pdf_filename, selected_criteria)
         else:
+            logger.info("Respondendo pergunta específica")
             prompt = create_question_prompt(pdf_text, message, selected_criteria)
         
         # Gerar resposta
+        logger.info("Enviando prompt para o Gemini")
         response = generate_gemini_response(prompt)
+        logger.info("Resposta recebida do Gemini")
         
         return jsonify({"success": True, "response": response})
     
