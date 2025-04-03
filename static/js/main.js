@@ -177,6 +177,11 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     criteria = data.criteria;
+                    
+                    // Selecionar todos os critérios automaticamente
+                    selectedCriteria = Object.keys(criteria);
+                    console.log('Todos os critérios foram selecionados automaticamente:', selectedCriteria);
+                    
                     renderCriteriaList();
                 } else {
                     console.error('Erro ao carregar critérios:', data.error);

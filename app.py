@@ -312,7 +312,7 @@ Pergunta do usuário: {question}
 
 Por favor, analise o artigo científico acima com base nos critérios fornecidos e responda à pergunta do usuário.
 Sua resposta deve ser detalhada, precisa e baseada apenas no conteúdo do artigo.
-Se a pergunta não puder ser respondida com base no artigo, explique por quê.
+Se a pergunta não puder ser respondida com base no artigo, informe isso claramente.
 Utilize markdown para formatar sua resposta quando apropriado."""
     
     return prompt
@@ -368,13 +368,13 @@ def chat():
 def create_analysis_prompt_full(pdf_text, pdf_filename, criteria):
     prompt = f"""Faça uma análise completa e detalhada do seguinte artigo científico: '{pdf_filename}'.
 
-Conteúdo do PDF:
-{pdf_text}
-
 """
     
+    # Adicionar critérios logo no início do prompt para maior ênfase
     if criteria:
-        prompt += "Organize sua análise de acordo com os seguintes critérios:\n\n"
+        prompt += """IMPORTANTE: Sua análise DEVE seguir rigorosamente os critérios abaixo. Para cada critério, crie uma seção dedicada na sua resposta:
+
+"""
         for key, description in criteria.items():
             prompt += f"## {key.capitalize()}\n{description}\n\n"
     else:
@@ -399,6 +399,14 @@ As limitações do estudo.
 A relevância e contribuição para o campo.
 """
     
+    # Adicionar o texto do PDF após os critérios para que a IA priorize os critérios
+    prompt += f"""
+
+Conteúdo do PDF (use APENAS este conteúdo para sua análise):
+{pdf_text}
+
+"""
+    
     prompt += """
 
 Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo estas diretrizes:
@@ -414,21 +422,40 @@ Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo e
 9. Separe seções com linhas horizontais (---) quando apropriado
 10. Inclua um resumo conciso no início e uma conclusão ao final
 
-Seja detalhado, mas conciso. Baseie sua análise apenas no conteúdo do PDF fornecido.
+Seja detalhado, mas conciso. Baseie sua análise APENAS no conteúdo do PDF fornecido.
+
+LEMBRE-SE: Sua análise DEVE abordar TODOS os critérios especificados acima, sem exceção.
 """
     
     return prompt
 
 # Função para criar o prompt de pergunta
 def create_question_prompt(pdf_text, question, criteria):
-    prompt = f"Pergunta do usuário: {question}\n\nConteúdo do PDF:\n{pdf_text}\n\n"
+    prompt = f"""IMPORTANTE: Responda à seguinte pergunta com base APENAS no conteúdo do PDF fornecido.
+
+Pergunta do usuário: {question}
+
+"""
     
+    # Adicionar critérios logo no início do prompt para maior ênfase
     if criteria:
-        prompt += "\nConsidere os seguintes critérios de análise ao responder:\n"
+        prompt += """IMPORTANTE: Ao responder, DEVE considerar rigorosamente os seguintes critérios de análise. Organize sua resposta para abordar cada um destes critérios relevantes à pergunta:
+
+"""
         for key, description in criteria.items():
-            prompt += f"- {key}: {description}\n"
+            prompt += f"## {key.capitalize()}\n{description}\n\n"
+    
+    # Adicionar o texto do PDF após os critérios para que a IA priorize os critérios
+    prompt += f"""
+Conteúdo do PDF (use APENAS este conteúdo para sua resposta):
+{pdf_text}
+
+"""
     
     prompt += """
+Por favor, analise o artigo científico acima com base nos critérios fornecidos e responda à pergunta do usuário.
+Sua resposta deve ser detalhada, precisa e baseada apenas no conteúdo do artigo.
+Se a pergunta não puder ser respondida com base no artigo, explique por quê.
 
 Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo estas diretrizes:
 
@@ -441,7 +468,9 @@ Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo e
 7. Quando citar dados numéricos, organize-os em tabelas bem formatadas
 8. Utilize blocos de citação (>) para destacar trechos importantes do artigo
 
-Seja detalhado, mas conciso. Baseie sua resposta apenas no conteúdo do PDF fornecido.
+Seja detalhado, mas conciso. Baseie sua resposta APENAS no conteúdo do PDF fornecido.
+
+LEMBRE-SE: Sua resposta DEVE considerar TODOS os critérios especificados acima que sejam relevantes à pergunta.
 """
     
     return prompt
