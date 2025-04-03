@@ -628,16 +628,15 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Enviando solicitação de análise com PDF ID:', currentPdfId); // Log para debug
         
         // Enviar solicitação de análise para o servidor
-        fetch('/chat', {
+        fetch('/analyze', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: 'Faça uma análise completa deste artigo',
                 pdf_id: currentPdfId,
-                criteria: criteriaToSend,
-                is_analysis: true
+                question: 'Faça uma análise completa deste artigo',
+                criteria: criteriaToSend
             })
         })
         .then(response => response.json())
@@ -646,7 +645,7 @@ document.addEventListener('DOMContentLoaded', function() {
             removeTypingIndicator();
             
             if (data.success) {
-                addMessage('system', data.response);
+                addMessage('system', data.answer);
             } else {
                 // Verificar se é erro de PDF não encontrado
                 if (data.error && data.error.includes('PDF não encontrado')) {

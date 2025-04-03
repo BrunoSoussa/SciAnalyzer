@@ -286,6 +286,7 @@ def analyze_article():
         
         # Criar o prompt para análise
         prompt = create_analysis_prompt(pdf_text, question, criteria)
+        print(prompt)
         
         # Gerar resposta
         response = generate_gemini_response(prompt)
