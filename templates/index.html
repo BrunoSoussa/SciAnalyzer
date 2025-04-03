@@ -32,28 +32,12 @@
                 </div>
             </div>
 
-            <div class="criteria-panel" id="criteriaPanel">
-                <div class="criteria-header">
-                    <h3>Critérios de Análise</h3>
-                    <button id="toggleCriteriaBtn" class="toggle-btn">
-                        <i class="fas fa-chevron-up"></i>
-                    </button>
-                </div>
-                <div class="criteria-content">
-                    <div class="criteria-list" id="criteriaList">
-                        <!-- Os critérios serão carregados dinamicamente aqui -->
-                    </div>
-                    <div class="criteria-actions">
-                        <button id="addCriteriaBtn" class="btn-sm">
-                            <i class="fas fa-plus"></i> Adicionar Critério
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             <div class="chat-input-area">
                 <button id="uploadBtn" class="upload-btn" title="Fazer upload de PDF">
                     <i class="fas fa-file-upload"></i>
+                </button>
+                <button id="toggleCriteriaBtn" class="criteria-btn" title="Critérios de análise">
+                    <i class="fas fa-cog"></i>
                 </button>
                 <input type="file" id="pdfFileInput" accept=".pdf" style="display: none;">
                 <div class="input-wrapper">
@@ -69,6 +53,26 @@
                 </div>
             </div>
         </main>
+
+        <!-- Aba lateral de critérios -->
+        <div class="criteria-sidebar" id="criteriaSidebar">
+            <div class="criteria-sidebar-header">
+                <h3>Critérios de Análise</h3>
+                <button id="closeSidebarBtn" class="close-sidebar-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="criteria-sidebar-content">
+                <div class="criteria-list" id="criteriaList">
+                    <!-- Os critérios serão carregados dinamicamente aqui -->
+                </div>
+                <div class="criteria-actions">
+                    <button id="addCriteriaBtn" class="btn-sm">
+                        <i class="fas fa-plus"></i> Adicionar Critério
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Modal para adicionar/editar critério -->
         <div class="modal" id="criteriaModal">
@@ -115,6 +119,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- Sobreposição para fechar a barra lateral ao clicar fora -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
     </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

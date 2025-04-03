@@ -8,9 +8,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const pdfFileInput = document.getElementById('pdfFileInput');
     const loadingOverlay = document.getElementById('loadingOverlay');
     const criteriaList = document.getElementById('criteriaList');
-    const toggleCriteriaBtn = document.getElementById('toggleCriteriaBtn');
-    const criteriaPanel = document.getElementById('criteriaPanel');
     const addCriteriaBtn = document.getElementById('addCriteriaBtn');
+    
+    // Novos elementos da aba lateral de critérios
+    const toggleCriteriaBtn = document.getElementById('toggleCriteriaBtn');
+    const criteriaSidebar = document.getElementById('criteriaSidebar');
+    const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
     
     // Elementos do modal de critérios
     const criteriaModal = document.getElementById('criteriaModal');
@@ -27,6 +31,135 @@ document.addEventListener('DOMContentLoaded', function() {
     const confirmBtn = document.getElementById('confirmBtn');
     const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
     const closeConfirmBtn = document.getElementById('closeConfirmBtn');
+    
+    // Verificar se os elementos existem
+    console.log('Elementos carregados:', {
+        chatMessages,
+        messageInput,
+        sendBtn,
+        analyzeBtn,
+        uploadBtn,
+        pdfFileInput,
+        loadingOverlay,
+        criteriaList,
+        addCriteriaBtn,
+        toggleCriteriaBtn,
+        criteriaSidebar,
+        closeSidebarBtn,
+        sidebarOverlay,
+        criteriaModal,
+        modalTitle,
+        criteriaKey,
+        criteriaDescription,
+        saveCriteriaBtn,
+        closeModalBtn,
+        cancelEditBtn,
+        confirmModal,
+        confirmMessage,
+        confirmBtn,
+        cancelConfirmBtn,
+        closeConfirmBtn
+    });
+    
+    if (!chatMessages) {
+        console.error('Elemento chatMessages não encontrado!');
+    }
+    
+    if (!messageInput) {
+        console.error('Elemento messageInput não encontrado!');
+    }
+    
+    if (!sendBtn) {
+        console.error('Elemento sendBtn não encontrado!');
+    }
+    
+    if (!analyzeBtn) {
+        console.error('Elemento analyzeBtn não encontrado!');
+    }
+    
+    if (!uploadBtn) {
+        console.error('Elemento uploadBtn não encontrado!');
+    }
+    
+    if (!pdfFileInput) {
+        console.error('Elemento pdfFileInput não encontrado!');
+    }
+    
+    if (!loadingOverlay) {
+        console.error('Elemento loadingOverlay não encontrado!');
+    }
+    
+    if (!criteriaList) {
+        console.error('Elemento criteriaList não encontrado!');
+    }
+    
+    if (!addCriteriaBtn) {
+        console.error('Elemento addCriteriaBtn não encontrado!');
+    }
+    
+    if (!toggleCriteriaBtn) {
+        console.error('Elemento toggleCriteriaBtn não encontrado!');
+    }
+    
+    if (!criteriaSidebar) {
+        console.error('Elemento criteriaSidebar não encontrado!');
+    }
+    
+    if (!closeSidebarBtn) {
+        console.error('Elemento closeSidebarBtn não encontrado!');
+    }
+    
+    if (!sidebarOverlay) {
+        console.error('Elemento sidebarOverlay não encontrado!');
+    }
+    
+    if (!criteriaModal) {
+        console.error('Elemento criteriaModal não encontrado!');
+    }
+    
+    if (!modalTitle) {
+        console.error('Elemento modalTitle não encontrado!');
+    }
+    
+    if (!criteriaKey) {
+        console.error('Elemento criteriaKey não encontrado!');
+    }
+    
+    if (!criteriaDescription) {
+        console.error('Elemento criteriaDescription não encontrado!');
+    }
+    
+    if (!saveCriteriaBtn) {
+        console.error('Elemento saveCriteriaBtn não encontrado!');
+    }
+    
+    if (!closeModalBtn) {
+        console.error('Elemento closeModalBtn não encontrado!');
+    }
+    
+    if (!cancelEditBtn) {
+        console.error('Elemento cancelEditBtn não encontrado!');
+    }
+    
+    if (!confirmModal) {
+        console.error('Elemento confirmModal não encontrado!');
+    }
+    
+    if (!confirmMessage) {
+        console.error('Elemento confirmMessage não encontrado!');
+    }
+    
+    if (!confirmBtn) {
+        console.error('Elemento confirmBtn não encontrado!');
+    }
+    
+    if (!cancelConfirmBtn) {
+        console.error('Elemento cancelConfirmBtn não encontrado!');
+    }
+    
+    if (!closeConfirmBtn) {
+        console.error('Elemento closeConfirmBtn não encontrado!');
+    }
     
     // Variáveis de estado
     let currentPdfId = null;
@@ -126,6 +259,7 @@ document.addEventListener('DOMContentLoaded', function() {
         isEditingCriteria = false;
         editingCriteriaKey = null;
         criteriaModal.style.display = 'flex';
+        closeCriteriaSidebar(); // Fechar a barra lateral automaticamente
     }
     
     // Abrir modal para editar critério existente
@@ -137,6 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
         isEditingCriteria = true;
         editingCriteriaKey = key;
         criteriaModal.style.display = 'flex';
+        closeCriteriaSidebar(); // Fechar a barra lateral automaticamente
     }
     
     // Fechar modal de critérios
@@ -235,6 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
         confirmMessage.textContent = message;
         confirmCallback = callback;
         confirmModal.style.display = 'flex';
+        closeCriteriaSidebar(); // Fechar a barra lateral automaticamente
     }
     
     // Fechar modal de confirmação
@@ -555,6 +691,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Abrir aba lateral de critérios
+    function openCriteriaSidebar() {
+        console.log('Abrindo barra lateral'); // Debug
+        criteriaSidebar.style.right = '0'; // Forçar posicionamento via JavaScript
+        criteriaSidebar.classList.add('open');
+        sidebarOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    // Fechar aba lateral de critérios
+    function closeCriteriaSidebar() {
+        console.log('Fechando barra lateral'); // Debug
+        criteriaSidebar.style.right = '-330px'; // Forçar posicionamento via JavaScript
+        criteriaSidebar.classList.remove('open');
+        sidebarOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
     // Alternar visibilidade do painel de critérios
     function toggleCriteriaPanel() {
         const content = criteriaPanel.querySelector('.criteria-content');
@@ -574,26 +728,36 @@ document.addEventListener('DOMContentLoaded', function() {
     
     analyzeBtn.addEventListener('click', generateAnalysis);
     
-    messageInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            sendMessage();
-        }
-    });
-    
     uploadBtn.addEventListener('click', function() {
         pdfFileInput.click();
     });
     
     pdfFileInput.addEventListener('change', uploadPdf);
     
-    toggleCriteriaBtn.addEventListener('click', toggleCriteriaPanel);
+    messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
     
+    // Event listeners para aba lateral de critérios
+    console.log('Adicionando event listener ao botão de critérios:', toggleCriteriaBtn); // Debug
+    toggleCriteriaBtn.addEventListener('click', function() {
+        console.log('Botão de critérios clicado'); // Debug
+        openCriteriaSidebar();
+    });
+    closeSidebarBtn.addEventListener('click', closeCriteriaSidebar);
+    sidebarOverlay.addEventListener('click', closeCriteriaSidebar);
+    
+    // Event listeners para modal de critérios
     addCriteriaBtn.addEventListener('click', openAddCriteriaModal);
-    
     closeModalBtn.addEventListener('click', closeCriteriaModal);
     cancelEditBtn.addEventListener('click', closeCriteriaModal);
     saveCriteriaBtn.addEventListener('click', saveCriteria);
     
+    // Event listeners para modal de confirmação
+    closeConfirmBtn.addEventListener('click', closeConfirmModal);
+    cancelConfirmBtn.addEventListener('click', closeConfirmModal);
     confirmBtn.addEventListener('click', function() {
         if (confirmCallback) {
             confirmCallback();
@@ -601,9 +765,9 @@ document.addEventListener('DOMContentLoaded', function() {
         closeConfirmModal();
     });
     
-    cancelConfirmBtn.addEventListener('click', closeConfirmModal);
-    closeConfirmBtn.addEventListener('click', closeConfirmModal);
-    
-    // Inicializar
+    // Carregar critérios quando a página for carregada
     loadCriteria();
+    
+    // Garantir que a barra lateral fique escondida
+    setTimeout(closeCriteriaSidebar, 100);
 });
