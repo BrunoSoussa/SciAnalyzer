@@ -201,30 +201,41 @@ def upload_pdf():
     try:
         # Verificar se o arquivo foi enviado
         if 'pdf' not in request.files:
+            logger.error("Nenhum arquivo enviado na requisição de upload")
             return jsonify({"success": False, "error": "Nenhum arquivo enviado"})
         
         file = request.files['pdf']
         
         # Verificar se o arquivo tem nome
         if file.filename == '':
+            logger.error("Arquivo sem nome enviado na requisição de upload")
             return jsonify({"success": False, "error": "Nenhum arquivo selecionado"})
         
         # Verificar se o arquivo é um PDF
         if not file.filename.lower().endswith('.pdf'):
+            logger.error(f"Arquivo com extensão inválida enviado: {file.filename}")
             return jsonify({"success": False, "error": "Por favor, envie um arquivo PDF"})
         
         # Gerar ID único para o PDF
         pdf_id = str(uuid.uuid4())
+        logger.info(f"Novo PDF ID gerado: {pdf_id} para o arquivo {file.filename}")
         
         # Salvar o arquivo
         filename = secure_filename(file.filename)
         file_path = os.path.join(PDF_STORAGE_DIR, f"{pdf_id}_{filename}")
         file.save(file_path)
+        logger.info(f"Arquivo salvo em: {file_path}")
+        
+        # Verificar se o arquivo foi salvo corretamente
+        if not os.path.exists(file_path):
+            logger.error(f"Falha ao salvar o arquivo em: {file_path}")
+            return jsonify({"success": False, "error": "Falha ao salvar o arquivo no servidor"})
         
         # Extrair texto do PDF
         pdf_text = extract_text_from_pdf(file_path)
         
         if not pdf_text or pdf_text.strip() == "":
+            logger.error(f"Não foi possível extrair texto do PDF: {file_path}")
             os.remove(file_path)  # Remover arquivo se não conseguir extrair texto
             return jsonify({"success": False, "error": "Não foi possível extrair texto do PDF. Verifique se o arquivo não está corrompido ou protegido."})
         
@@ -235,6 +246,9 @@ def upload_pdf():
             "timestamp": time.time(),
             "path": file_path
         }
+        
+        logger.info(f"PDF armazenado com sucesso. ID: {pdf_id}, Tamanho do texto: {len(pdf_text)} caracteres")
+        logger.info(f"PDFs atualmente armazenados: {list(pdf_storage.keys())}")
         
         # Limpar PDFs antigos
         cleanup_old_pdfs()
@@ -314,13 +328,26 @@ def chat():
         selected_criteria = data.get('criteria', {})
         is_analysis = data.get('is_analysis', False)
         
-        # Verificar se o PDF existe
-        if not pdf_id or pdf_id not in pdf_storage:
+        logger.info(f"Recebida requisição de chat. PDF ID: {pdf_id}, Is Analysis: {is_analysis}")
+        
+        # Verificar se o ID do PDF foi fornecido
+        if not pdf_id:
+            logger.error("PDF ID não fornecido na requisição de chat")
+            return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
+        
+        # Verificar se o PDF existe no armazenamento
+        if pdf_id not in pdf_storage:
+            logger.error(f"PDF ID {pdf_id} não encontrado no armazenamento. PDFs disponíveis: {list(pdf_storage.keys())}")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
         # Obter o texto do PDF
         pdf_text = pdf_storage[pdf_id]["text"]
         pdf_filename = pdf_storage[pdf_id]["filename"]
+        
+        # Verificar se o texto do PDF é válido
+        if not pdf_text or pdf_text.strip() == "":
+            logger.error(f"Texto do PDF {pdf_id} está vazio")
+            return jsonify({"success": False, "error": "O texto extraído do PDF está vazio. Por favor, tente fazer upload novamente."})
         
         # Construir o prompt com base no tipo de solicitação (análise ou pergunta)
         if is_analysis:

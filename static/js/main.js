@@ -535,6 +535,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Verificação mais robusta do PDF
         if (!currentPdfId) {
             addMessage('system', 'Por favor, faça upload de um PDF antes de enviar uma mensagem.', true);
             return;
@@ -554,6 +555,8 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedCriteria.forEach(key => {
             criteriaToSend[key] = criteria[key];
         });
+        
+        console.log('Enviando mensagem com PDF ID:', currentPdfId); // Log para debug
         
         // Enviar mensagem para o servidor
         fetch('/chat', {
@@ -576,7 +579,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 addMessage('system', data.response);
             } else {
-                addMessage('system', `Erro: ${data.error}`, true);
+                // Verificar se é erro de PDF não encontrado
+                if (data.error && data.error.includes('PDF não encontrado')) {
+                    addMessage('system', 'O PDF não foi encontrado no servidor. Isso pode acontecer se a sessão expirou ou o servidor foi reiniciado. Por favor, faça o upload do PDF novamente.', true);
+                    // Resetar o ID do PDF para forçar novo upload
+                    currentPdfId = null;
+                    currentPdfName = null;
+                } else {
+                    addMessage('system', `Erro: ${data.error}`, true);
+                }
             }
         })
         .catch(error => {
@@ -614,6 +625,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
+        console.log('Enviando solicitação de análise com PDF ID:', currentPdfId); // Log para debug
+        
         // Enviar solicitação de análise para o servidor
         fetch('/chat', {
             method: 'POST',
@@ -635,7 +648,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 addMessage('system', data.response);
             } else {
-                addMessage('system', `Erro: ${data.error}`, true);
+                // Verificar se é erro de PDF não encontrado
+                if (data.error && data.error.includes('PDF não encontrado')) {
+                    addMessage('system', 'O PDF não foi encontrado no servidor. Isso pode acontecer se a sessão expirou ou o servidor foi reiniciado. Por favor, faça o upload do PDF novamente.', true);
+                    // Resetar o ID do PDF para forçar novo upload
+                    currentPdfId = null;
+                    currentPdfName = null;
+                } else {
+                    addMessage('system', `Erro: ${data.error}`, true);
+                }
             }
         })
         .catch(error => {
