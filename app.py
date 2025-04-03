@@ -388,7 +388,7 @@ def chat():
         
         # Verificar se o PDF existe no armazenamento
         if not pdf_exists(pdf_id):
-            logger.error(f"PDF ID {pdf_id} não encontrado no armazenamento. PDFs disponíveis: {list(pdf_storage.keys())}")
+            logger.error(f"PDF ID {pdf_id} não encontrado no armazenamento.")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
         # Obter o texto do PDF
