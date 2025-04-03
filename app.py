@@ -4,6 +4,7 @@ import uuid
 import tempfile
 import logging
 import json
+import pickle
 from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
 import PyPDF2
@@ -28,10 +29,53 @@ MODEL = "gemini-2.0-flash"
 TEMP_DIR = tempfile.gettempdir()
 PDF_STORAGE_DIR = os.path.join(TEMP_DIR, "scianalyzer_pdfs")
 CRITERIA_STORAGE_DIR = os.path.join(TEMP_DIR, "scianalyzer_criteria")
+PDF_METADATA_DIR = os.path.join(TEMP_DIR, "scianalyzer_pdf_metadata")
 os.makedirs(PDF_STORAGE_DIR, exist_ok=True)
 os.makedirs(CRITERIA_STORAGE_DIR, exist_ok=True)
+os.makedirs(PDF_METADATA_DIR, exist_ok=True)
 logger.info(f"Diretório de armazenamento de PDFs: {PDF_STORAGE_DIR}")
 logger.info(f"Diretório de armazenamento de critérios: {CRITERIA_STORAGE_DIR}")
+logger.info(f"Diretório de armazenamento de metadados: {PDF_METADATA_DIR}")
+
+# Função para salvar metadados do PDF
+def save_pdf_metadata(pdf_id, metadata):
+    try:
+        metadata_file = os.path.join(PDF_METADATA_DIR, f"{pdf_id}.pickle")
+        with open(metadata_file, 'wb') as f:
+            pickle.dump(metadata, f)
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao salvar metadados do PDF {pdf_id}: {str(e)}")
+        return False
+
+# Função para carregar metadados do PDF
+def load_pdf_metadata(pdf_id):
+    try:
+        metadata_file = os.path.join(PDF_METADATA_DIR, f"{pdf_id}.pickle")
+        if not os.path.exists(metadata_file):
+            return None
+        
+        with open(metadata_file, 'rb') as f:
+            metadata = pickle.load(f)
+        return metadata
+    except Exception as e:
+        logger.error(f"Erro ao carregar metadados do PDF {pdf_id}: {str(e)}")
+        return None
+
+# Função para verificar se um PDF existe
+def pdf_exists(pdf_id):
+    # Verificar se existe o arquivo de metadados
+    metadata_file = os.path.join(PDF_METADATA_DIR, f"{pdf_id}.pickle")
+    if not os.path.exists(metadata_file):
+        return False
+    
+    # Carregar metadados para verificar o caminho do arquivo
+    metadata = load_pdf_metadata(pdf_id)
+    if not metadata or 'path' not in metadata:
+        return False
+    
+    # Verificar se o arquivo PDF existe
+    return os.path.exists(metadata['path'])
 
 # Armazenamento temporário de PDFs
 pdf_storage = {}
@@ -239,16 +283,21 @@ def upload_pdf():
             os.remove(file_path)  # Remover arquivo se não conseguir extrair texto
             return jsonify({"success": False, "error": "Não foi possível extrair texto do PDF. Verifique se o arquivo não está corrompido ou protegido."})
         
-        # Armazenar o texto do PDF
-        pdf_storage[pdf_id] = {
+        # Armazenar metadados do PDF
+        metadata = {
             "text": pdf_text,
             "filename": filename,
             "timestamp": time.time(),
             "path": file_path
         }
         
+        # Salvar metadados em arquivo
+        if not save_pdf_metadata(pdf_id, metadata):
+            logger.error(f"Falha ao salvar metadados do PDF {pdf_id}")
+            os.remove(file_path)  # Remover arquivo se não conseguir salvar metadados
+            return jsonify({"success": False, "error": "Falha ao processar o PDF no servidor"})
+        
         logger.info(f"PDF armazenado com sucesso. ID: {pdf_id}, Tamanho do texto: {len(pdf_text)} caracteres")
-        logger.info(f"PDFs atualmente armazenados: {list(pdf_storage.keys())}")
         
         # Limpar PDFs antigos
         cleanup_old_pdfs()
@@ -270,19 +319,30 @@ def analyze_article():
         question = data.get('question')
         criteria = data.get('criteria', [])
         
+        logger.info(f"Recebida requisição de análise. PDF ID: {pdf_id}")
+        
         # Verificar se os parâmetros necessários foram fornecidos
         if not pdf_id:
+            logger.error("ID do PDF não fornecido na requisição de análise")
             return jsonify({"success": False, "error": "ID do PDF não fornecido"})
         
         if not question:
+            logger.error("Pergunta não fornecida na requisição de análise")
             return jsonify({"success": False, "error": "Pergunta não fornecida"})
         
-        # Verificar se o PDF existe no armazenamento
-        if pdf_id not in pdf_storage:
+        # Verificar se o PDF existe
+        if not pdf_exists(pdf_id):
+            logger.error(f"PDF ID {pdf_id} não encontrado")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça o upload novamente."})
         
+        # Carregar metadados do PDF
+        metadata = load_pdf_metadata(pdf_id)
+        if not metadata or 'text' not in metadata:
+            logger.error(f"Metadados do PDF {pdf_id} não encontrados ou inválidos")
+            return jsonify({"success": False, "error": "Dados do PDF não encontrados. Por favor, faça o upload novamente."})
+        
         # Obter o texto do PDF
-        pdf_text = pdf_storage[pdf_id]["text"]
+        pdf_text = metadata["text"]
         
         # Criar o prompt para análise
         prompt = create_analysis_prompt(pdf_text, question, criteria)
@@ -336,14 +396,20 @@ def chat():
             logger.error("PDF ID não fornecido na requisição de chat")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
-        # Verificar se o PDF existe no armazenamento
-        if pdf_id not in pdf_storage:
-            logger.error(f"PDF ID {pdf_id} não encontrado no armazenamento. PDFs disponíveis: {list(pdf_storage.keys())}")
+        # Verificar se o PDF existe
+        if not pdf_exists(pdf_id):
+            logger.error(f"PDF ID {pdf_id} não encontrado")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
+        # Carregar metadados do PDF
+        metadata = load_pdf_metadata(pdf_id)
+        if not metadata or 'text' not in metadata:
+            logger.error(f"Metadados do PDF {pdf_id} não encontrados ou inválidos")
+            return jsonify({"success": False, "error": "Dados do PDF não encontrados. Por favor, faça upload novamente."})
+        
         # Obter o texto do PDF
-        pdf_text = pdf_storage[pdf_id]["text"]
-        pdf_filename = pdf_storage[pdf_id]["filename"]
+        pdf_text = metadata["text"]
+        pdf_filename = metadata["filename"]
         
         # Verificar se o texto do PDF é válido
         if not pdf_text or pdf_text.strip() == "":
@@ -511,23 +577,45 @@ def delete_criteria():
 def cleanup_old_pdfs():
     try:
         current_time = time.time()
-        expired_ids = []
+        expired_files = []
         
-        # Identificar PDFs expirados (mais de 1 hora)
-        for pdf_id, data in pdf_storage.items():
-            if current_time - data["timestamp"] > 3600:  # 1 hora
-                expired_ids.append(pdf_id)
+        # Listar todos os arquivos de metadados
+        for filename in os.listdir(PDF_METADATA_DIR):
+            if not filename.endswith('.pickle'):
+                continue
+                
+            pdf_id = filename[:-7]  # Remover a extensão .pickle
+            metadata_path = os.path.join(PDF_METADATA_DIR, filename)
+            
+            try:
+                # Carregar metadados
+                with open(metadata_path, 'rb') as f:
+                    metadata = pickle.load(f)
+                
+                # Verificar se o PDF expirou (mais de 1 hora)
+                if current_time - metadata.get("timestamp", 0) > 3600:  # 1 hora
+                    expired_files.append((pdf_id, metadata.get("path"), metadata_path))
+            except Exception as e:
+                logger.error(f"Erro ao processar metadados {filename}: {str(e)}")
+                # Adicionar arquivo de metadados corrompido à lista de expirados
+                expired_files.append((pdf_id, None, metadata_path))
         
         # Remover PDFs expirados
-        for pdf_id in expired_ids:
-            filename = pdf_storage[pdf_id]["filename"]
-            file_path = os.path.join(PDF_STORAGE_DIR, f"{pdf_id}_{filename}")
+        for pdf_id, pdf_path, metadata_path in expired_files:
+            # Remover arquivo PDF se existir
+            if pdf_path and os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                    logger.info(f"Arquivo PDF expirado removido: {pdf_path}")
+                except Exception as e:
+                    logger.error(f"Erro ao remover arquivo PDF {pdf_path}: {str(e)}")
             
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            
-            del pdf_storage[pdf_id]
-            logger.info(f"PDF expirado removido: {filename} (ID: {pdf_id})")
+            # Remover arquivo de metadados
+            try:
+                os.remove(metadata_path)
+                logger.info(f"Metadados expirados removidos: {metadata_path}")
+            except Exception as e:
+                logger.error(f"Erro ao remover metadados {metadata_path}: {str(e)}")
     
     except Exception as e:
         logger.error(f"Erro na limpeza de PDFs antigos: {str(e)}")
