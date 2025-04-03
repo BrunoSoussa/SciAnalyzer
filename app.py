@@ -28,69 +28,13 @@ MODEL = "gemini-2.0-flash"
 TEMP_DIR = tempfile.gettempdir()
 PDF_STORAGE_DIR = os.path.join(TEMP_DIR, "scianalyzer_pdfs")
 CRITERIA_STORAGE_DIR = os.path.join(TEMP_DIR, "scianalyzer_criteria")
-PDF_INFO_DIR = os.path.join(TEMP_DIR, "scianalyzer_pdf_info")  # Novo diretório para informações dos PDFs
 os.makedirs(PDF_STORAGE_DIR, exist_ok=True)
 os.makedirs(CRITERIA_STORAGE_DIR, exist_ok=True)
-os.makedirs(PDF_INFO_DIR, exist_ok=True)  # Criar diretório para informações dos PDFs
 logger.info(f"Diretório de armazenamento de PDFs: {PDF_STORAGE_DIR}")
 logger.info(f"Diretório de armazenamento de critérios: {CRITERIA_STORAGE_DIR}")
-logger.info(f"Diretório de informações de PDFs: {PDF_INFO_DIR}")
 
-# Armazenamento temporário de PDFs (mantido para compatibilidade)
+# Armazenamento temporário de PDFs
 pdf_storage = {}
-
-# Função para salvar informações do PDF em arquivo
-def save_pdf_info(pdf_id, info):
-    try:
-        info_file = os.path.join(PDF_INFO_DIR, f"{pdf_id}.json")
-        with open(info_file, 'w', encoding='utf-8') as f:
-            json.dump(info, f, ensure_ascii=False)
-        return True
-    except Exception as e:
-        logger.error(f"Erro ao salvar informações do PDF {pdf_id}: {str(e)}")
-        return False
-
-# Função para carregar informações do PDF do arquivo
-def load_pdf_info(pdf_id):
-    try:
-        info_file = os.path.join(PDF_INFO_DIR, f"{pdf_id}.json")
-        if os.path.exists(info_file):
-            with open(info_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return None
-    except Exception as e:
-        logger.error(f"Erro ao carregar informações do PDF {pdf_id}: {str(e)}")
-        return None
-
-# Função para verificar se um PDF existe
-def pdf_exists(pdf_id):
-    # Verificar primeiro no dicionário em memória (para compatibilidade)
-    if pdf_id in pdf_storage:
-        return True
-    
-    # Verificar no sistema de arquivos
-    info_file = os.path.join(PDF_INFO_DIR, f"{pdf_id}.json")
-    return os.path.exists(info_file)
-
-# Função para obter o texto de um PDF
-def get_pdf_text(pdf_id):
-    # Verificar primeiro no dicionário em memória (para compatibilidade)
-    if pdf_id in pdf_storage:
-        return pdf_storage[pdf_id]["text"], pdf_storage[pdf_id]["filename"]
-    
-    # Carregar do sistema de arquivos
-    info = load_pdf_info(pdf_id)
-    if info:
-        # Verificar se o arquivo PDF ainda existe
-        if os.path.exists(info["path"]):
-            return info["text"], info["filename"]
-        else:
-            # Se o arquivo foi removido, tentar extrair o texto novamente
-            logger.warning(f"Arquivo PDF {info['path']} não encontrado. Tentando recuperar do texto armazenado.")
-            if "text" in info and info["text"]:
-                return info["text"], info["filename"]
-    
-    return None, None
 
 # Critérios de análise padrão
 DEFAULT_CRITERIA = {
@@ -295,16 +239,21 @@ def upload_pdf():
             os.remove(file_path)  # Remover arquivo se não conseguir extrair texto
             return jsonify({"success": False, "error": "Não foi possível extrair texto do PDF. Verifique se o arquivo não está corrompido ou protegido."})
         
-        # Armazenar informações do PDF
-        pdf_info = {
+        # Armazenar o texto do PDF
+        pdf_storage[pdf_id] = {
             "text": pdf_text,
             "filename": filename,
             "timestamp": time.time(),
             "path": file_path
         }
-        save_pdf_info(pdf_id, pdf_info)
         
         logger.info(f"PDF armazenado com sucesso. ID: {pdf_id}, Tamanho do texto: {len(pdf_text)} caracteres")
+        logger.info(f"PDFs atualmente armazenados: {list(pdf_storage.keys())}")
+        
+        # Limpar PDFs antigos
+        cleanup_old_pdfs()
+        
+        logger.info(f"PDF '{filename}' carregado com sucesso. ID: {pdf_id}")
         
         return jsonify({"success": True, "pdf_id": pdf_id, "filename": filename})
     
@@ -316,29 +265,24 @@ def upload_pdf():
 @app.route('/analyze', methods=['POST'])
 def analyze_article():
     try:
-        # Obter dados da requisição
         data = request.json
         pdf_id = data.get('pdf_id')
-        question = data.get('question', '')
-        criteria_keys = data.get('criteria', [])
+        question = data.get('question')
+        criteria = data.get('criteria', [])
         
-        # Verificar se o PDF foi fornecido
+        # Verificar se os parâmetros necessários foram fornecidos
         if not pdf_id:
-            return jsonify({"success": False, "error": "PDF não fornecido"})
+            return jsonify({"success": False, "error": "ID do PDF não fornecido"})
         
-        # Verificar se a pergunta foi fornecida
         if not question:
             return jsonify({"success": False, "error": "Pergunta não fornecida"})
         
         # Verificar se o PDF existe no armazenamento
-        if not pdf_exists(pdf_id):
+        if pdf_id not in pdf_storage:
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça o upload novamente."})
         
         # Obter o texto do PDF
-        pdf_text, pdf_filename = get_pdf_text(pdf_id)
-        
-        if not pdf_text:
-            return jsonify({"success": False, "error": "Não foi possível recuperar o texto do PDF. Por favor, faça o upload novamente."})
+        pdf_text = pdf_storage[pdf_id]["text"]
         
         # Criar o prompt para análise
         prompt = create_analysis_prompt(pdf_text, question, criteria)
@@ -346,11 +290,11 @@ def analyze_article():
         # Gerar resposta
         response = generate_gemini_response(prompt)
         
-        return jsonify({"success": True, "response": response})
+        return jsonify({"success": True, "answer": response})
     
     except Exception as e:
-        logger.error(f"Erro na análise: {str(e)}")
-        return jsonify({"success": False, "error": f"Erro ao analisar artigo: {str(e)}"})
+        logger.error(f"Erro ao analisar artigo: {str(e)}")
+        return jsonify({"success": False, "error": f"Erro ao analisar o artigo: {str(e)}"})
 
 # Função para criar o prompt de análise
 def create_analysis_prompt(pdf_text, question, criteria):
@@ -392,12 +336,13 @@ def chat():
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
         # Verificar se o PDF existe no armazenamento
-        if not pdf_exists(pdf_id):
-            logger.error(f"PDF ID {pdf_id} não encontrado no armazenamento.")
+        if pdf_id not in pdf_storage:
+            logger.error(f"PDF ID {pdf_id} não encontrado no armazenamento. PDFs disponíveis: {list(pdf_storage.keys())}")
             return jsonify({"success": False, "error": "PDF não encontrado. Por favor, faça upload novamente."})
         
         # Obter o texto do PDF
-        pdf_text, pdf_filename = get_pdf_text(pdf_id)
+        pdf_text = pdf_storage[pdf_id]["text"]
+        pdf_filename = pdf_storage[pdf_id]["filename"]
         
         # Verificar se o texto do PDF é válido
         if not pdf_text or pdf_text.strip() == "":
@@ -568,25 +513,20 @@ def cleanup_old_pdfs():
         expired_ids = []
         
         # Identificar PDFs expirados (mais de 1 hora)
-        for pdf_id in os.listdir(PDF_INFO_DIR):
-            info_file = os.path.join(PDF_INFO_DIR, pdf_id)
-            if os.path.exists(info_file):
-                with open(info_file, 'r', encoding='utf-8') as f:
-                    info = json.load(f)
-                    if current_time - info["timestamp"] > 3600:  # 1 hora
-                        expired_ids.append(pdf_id)
+        for pdf_id, data in pdf_storage.items():
+            if current_time - data["timestamp"] > 3600:  # 1 hora
+                expired_ids.append(pdf_id)
         
         # Remover PDFs expirados
         for pdf_id in expired_ids:
-            info_file = os.path.join(PDF_INFO_DIR, pdf_id)
-            if os.path.exists(info_file):
-                os.remove(info_file)
+            filename = pdf_storage[pdf_id]["filename"]
+            file_path = os.path.join(PDF_STORAGE_DIR, f"{pdf_id}_{filename}")
             
-            file_path = os.path.join(PDF_STORAGE_DIR, pdf_id)
             if os.path.exists(file_path):
                 os.remove(file_path)
             
-            logger.info(f"PDF expirado removido: {pdf_id}")
+            del pdf_storage[pdf_id]
+            logger.info(f"PDF expirado removido: {filename} (ID: {pdf_id})")
     
     except Exception as e:
         logger.error(f"Erro na limpeza de PDFs antigos: {str(e)}")
