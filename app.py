@@ -368,13 +368,13 @@ def chat():
 def create_analysis_prompt_full(pdf_text, pdf_filename, criteria):
     prompt = f"""Faça uma análise completa e detalhada do seguinte artigo científico: '{pdf_filename}'.
 
-"""
-    
-    # Adicionar critérios logo no início do prompt para maior ênfase
-    if criteria:
-        prompt += """IMPORTANTE: Sua análise DEVE seguir rigorosamente os critérios abaixo. Para cada critério, crie uma seção dedicada na sua resposta:
+Conteúdo do PDF:
+{pdf_text}
 
 """
+    
+    if criteria:
+        prompt += "Organize sua análise de acordo com os seguintes critérios:\n\n"
         for key, description in criteria.items():
             prompt += f"## {key.capitalize()}\n{description}\n\n"
     else:
@@ -399,14 +399,6 @@ As limitações do estudo.
 A relevância e contribuição para o campo.
 """
     
-    # Adicionar o texto do PDF após os critérios para que a IA priorize os critérios
-    prompt += f"""
-
-Conteúdo do PDF (use APENAS este conteúdo para sua análise):
-{pdf_text}
-
-"""
-    
     prompt += """
 
 Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo estas diretrizes:
@@ -422,9 +414,34 @@ Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo e
 9. Separe seções com linhas horizontais (---) quando apropriado
 10. Inclua um resumo conciso no início e uma conclusão ao final
 
-Seja detalhado, mas conciso. Baseie sua análise APENAS no conteúdo do PDF fornecido.
+Seja detalhado, mas conciso. Baseie sua análise apenas no conteúdo do PDF fornecido.
+"""
+    print(prompt)
+    return prompt
 
-LEMBRE-SE: Sua análise DEVE abordar TODOS os critérios especificados acima, sem exceção.
+# Função para criar o prompt de pergunta
+def create_question_prompt(pdf_text, question, criteria):
+    prompt = f"Pergunta do usuário: {question}\n\nConteúdo do PDF:\n{pdf_text}\n\n"
+    
+    if criteria:
+        prompt += "\nConsidere os seguintes critérios de análise ao responder:\n"
+        for key, description in criteria.items():
+            prompt += f"- {key}: {description}\n"
+    
+    prompt += """
+
+Formate sua resposta utilizando markdown de forma elegante e moderna, seguindo estas diretrizes:
+
+1. Use títulos (# e ##) para organizar as seções principais
+2. Use subtítulos (### e ####) para temas dentro de cada seção
+3. Utilize **negrito** para destacar conceitos-chave e termos importantes
+4. Utilize *itálico* para ênfase moderada ou termos específicos
+5. Crie listas com marcadores para enumerar pontos relacionados
+6. Use listas numeradas para sequências ou passos
+7. Quando citar dados numéricos, organize-os em tabelas bem formatadas
+8. Utilize blocos de citação (>) para destacar trechos importantes do artigo
+
+Seja detalhado, mas conciso. Baseie sua resposta apenas no conteúdo do PDF fornecido.
 """
     
     return prompt
