@@ -316,15 +316,17 @@ def upload_pdf():
 @app.route('/analyze', methods=['POST'])
 def analyze_article():
     try:
+        # Obter dados da requisição
         data = request.json
         pdf_id = data.get('pdf_id')
-        question = data.get('question')
-        criteria = data.get('criteria', [])
+        question = data.get('question', '')
+        criteria_keys = data.get('criteria', [])
         
-        # Verificar se os parâmetros necessários foram fornecidos
+        # Verificar se o PDF foi fornecido
         if not pdf_id:
-            return jsonify({"success": False, "error": "ID do PDF não fornecido"})
+            return jsonify({"success": False, "error": "PDF não fornecido"})
         
+        # Verificar se a pergunta foi fornecida
         if not question:
             return jsonify({"success": False, "error": "Pergunta não fornecida"})
         
@@ -335,17 +337,20 @@ def analyze_article():
         # Obter o texto do PDF
         pdf_text, pdf_filename = get_pdf_text(pdf_id)
         
+        if not pdf_text:
+            return jsonify({"success": False, "error": "Não foi possível recuperar o texto do PDF. Por favor, faça o upload novamente."})
+        
         # Criar o prompt para análise
         prompt = create_analysis_prompt(pdf_text, question, criteria)
         
         # Gerar resposta
         response = generate_gemini_response(prompt)
         
-        return jsonify({"success": True, "answer": response})
+        return jsonify({"success": True, "response": response})
     
     except Exception as e:
-        logger.error(f"Erro ao analisar artigo: {str(e)}")
-        return jsonify({"success": False, "error": f"Erro ao analisar o artigo: {str(e)}"})
+        logger.error(f"Erro na análise: {str(e)}")
+        return jsonify({"success": False, "error": f"Erro ao analisar artigo: {str(e)}"})
 
 # Função para criar o prompt de análise
 def create_analysis_prompt(pdf_text, question, criteria):
